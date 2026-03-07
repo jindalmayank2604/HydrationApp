@@ -1,144 +1,67 @@
 /* ══════════════════════════════════════════
-   MODULE: LocalStorage — fallback when Firebase not configured
+   MODULE: Storage
+   - LocalStorage: goal, reminder prefs, offline fallback
+   - Firestore: all water entries (per user, any device)
    ══════════════════════════════════════════ */
 
+/* ── LocalStorage (device-level) ── */
 const LocalStorage = (() => {
   const ENTRIES_KEY  = 'wt_entries_v1';
   const REMINDER_KEY = 'wt_reminder_v1';
   const GOAL_KEY     = 'wt_goal_v1';
   const DEFAULT_GOAL = 3000;
 
-  const readJSON = (key, fallback) => {
-    try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
-    catch { return fallback; }
-  };
-  const writeJSON = (key, value) => localStorage.setItem(key, JSON.stringify(value));
+  const readJSON  = (k, fb) => { try { return JSON.parse(localStorage.getItem(k)) ?? fb; } catch { return fb; } };
+  const writeJSON = (k, v)  => localStorage.setItem(k, JSON.stringify(v));
 
-  const getEntries = () => readJSON(ENTRIES_KEY, []);
-  const saveEntries = (entries) => writeJSON(ENTRIES_KEY, entries);
+  const getEntries    = ()           => readJSON(ENTRIES_KEY, []);
+  const saveEntries   = (e)          => writeJSON(ENTRIES_KEY, e);
+  const addEntry      = (amt, date)  => { const e = getEntries(); e.push({ id: Date.now().toString(), amount: amt, date }); saveEntries(e); };
+  const getEntriesForDate = (date)   => getEntries().filter(e => e.date === date);
+  const getTotalForDate   = (date)   => getEntriesForDate(date).reduce((s, e) => s + e.amount, 0);
+  const setTotalForDate   = (date, t)=> { const e = getEntries().filter(e => e.date !== date); if (t > 0) e.push({ id: Date.now().toString(), amount: t, date }); saveEntries(e); };
+  const deleteEntry       = (id)     => saveEntries(getEntries().filter(e => e.id !== id));
+  const getAllDates        = ()       => [...new Set(getEntries().map(e => e.date))].sort().reverse();
+  const getGoal           = ()       => readJSON(GOAL_KEY, DEFAULT_GOAL);
+  const setGoal           = (g)      => writeJSON(GOAL_KEY, g);
+  const getReminderPrefs  = ()       => readJSON(REMINDER_KEY, { enabled: false, interval: 60 });
+  const setReminderPrefs  = (p)      => writeJSON(REMINDER_KEY, p);
+  const resetAll          = ()       => localStorage.removeItem(ENTRIES_KEY);
 
-  const addEntry = (amount, date) => {
-    const entries = getEntries();
-    entries.push({ id: Date.now().toString(), amount, date });
-    saveEntries(entries);
-  };
-
-  const getEntriesForDate = (date) => getEntries().filter(e => e.date === date);
-
-  const getTotalForDate = (date) =>
-    getEntriesForDate(date).reduce((sum, e) => sum + e.amount, 0);
-
-  const setTotalForDate = (date, newTotal) => {
-    const entries = getEntries().filter(e => e.date !== date);
-    if (newTotal > 0) entries.push({ id: Date.now().toString(), amount: newTotal, date });
-    saveEntries(entries);
-  };
-
-  const deleteEntry = (entryId) => {
-    const entries = getEntries().filter(e => e.id !== entryId);
-    saveEntries(entries);
-  };
-
-  const getAllDates = () =>
-    [...new Set(getEntries().map(e => e.date))].sort().reverse();
-
-  const getGoal = () => readJSON(GOAL_KEY, DEFAULT_GOAL);
-  const setGoal = (goal) => writeJSON(GOAL_KEY, goal);
-
-  const getReminderPrefs = () => readJSON(REMINDER_KEY, { enabled: false, interval: 60 });
-  const setReminderPrefs = (prefs) => writeJSON(REMINDER_KEY, prefs);
-
-  const resetAll = () => {
-    localStorage.removeItem(ENTRIES_KEY);
-  };
-
-  return {
-    addEntry, getEntriesForDate, getTotalForDate, setTotalForDate,
-    deleteEntry, getAllDates, getGoal, setGoal,
-    getReminderPrefs, setReminderPrefs, resetAll,
-  };
+  return { addEntry, getEntriesForDate, getTotalForDate, setTotalForDate, deleteEntry, getAllDates, getGoal, setGoal, getReminderPrefs, setReminderPrefs, resetAll };
 })();
 
-/* ── Storage proxy — always waits for Firebase before deciding backend ── */
+/* ── Storage proxy — Firestore first, localStorage fallback ── */
 const Storage = (() => {
 
-  // Wait up to 5s for Firebase to be initialized AND userId to be set
-  const waitForFirebase = () => new Promise(resolve => {
-    const isReady = () => Firebase.isInitialized() && Firebase.getUserId();
-    if (isReady()) return resolve(true);
-    let attempts = 0;
-    const check = setInterval(() => {
-      attempts++;
-      if (isReady()) {
-        clearInterval(check);
-        resolve(true);
-      } else if (attempts > 50) { // 5 seconds max
-        clearInterval(check);
-        // Resolve anyway — will use LocalStorage as fallback
-        resolve(Firebase.isInitialized());
+  const run = async (firestoreFn, localFn) => {
+    const ready = await Firebase.waitUntilReady(5000);
+    if (ready) {
+      try {
+        const result = await firestoreFn();
+        return result;
+      } catch (e) {
+        console.warn('[Storage] Firestore error, using localStorage:', e.message);
       }
-    }, 100);
-  });
-
-  const tryFirebase = async (fn, fallback) => {
-    await waitForFirebase();
-    const fbReady = Firebase.isInitialized() && Firebase.getUserId();
-    console.log('[Storage] Firebase ready:', fbReady, '| userId:', Firebase.getUserId());
-    if (fbReady) {
-      try { return await fn(); }
-      catch(e) {
-        console.warn('[Storage] Firebase op failed, falling back to localStorage:', e.message);
-      }
+    } else {
+      console.warn('[Storage] Firebase not ready in time, using localStorage');
     }
-    console.warn('[Storage] Using localStorage — data NOT synced to cloud');
-    return fallback();
+    return localFn();
   };
 
-  const addEntry = (amount, date) =>
-    tryFirebase(
-      () => Firebase.addEntry(amount, date),
-      () => LocalStorage.addEntry(amount, date)
-    );
+  const addEntry          = (amt, date) => run(() => Firebase.addEntry(amt, date),       () => LocalStorage.addEntry(amt, date));
+  const getEntriesForDate = (date)      => run(() => Firebase.getEntriesForDate(date),   () => LocalStorage.getEntriesForDate(date));
+  const getTotalForDate   = (date)      => run(() => Firebase.getTotalForDate(date),      () => LocalStorage.getTotalForDate(date));
+  const setTotalForDate   = (date, t)   => run(() => Firebase.setTotalForDate(date, t),  () => LocalStorage.setTotalForDate(date, t));
+  const deleteEntry       = (id)        => run(() => Firebase.deleteEntry(id),            () => LocalStorage.deleteEntry(id));
+  const getAllDates        = ()          => run(() => Firebase.getAllDates(),               () => LocalStorage.getAllDates());
 
-  const getEntriesForDate = (date) =>
-    tryFirebase(
-      () => Firebase.getEntriesForDate(date),
-      () => LocalStorage.getEntriesForDate(date)
-    );
-
-  const getTotalForDate = (date) =>
-    tryFirebase(
-      () => Firebase.getTotalForDate(date),
-      () => LocalStorage.getTotalForDate(date)
-    );
-
-  const setTotalForDate = (date, total) =>
-    tryFirebase(
-      () => Firebase.setTotalForDate(date, total),
-      () => LocalStorage.setTotalForDate(date, total)
-    );
-
-  const deleteEntry = (id) =>
-    tryFirebase(
-      () => Firebase.deleteEntry(id),
-      () => LocalStorage.deleteEntry(id)
-    );
-
-  const getAllDates = () =>
-    tryFirebase(
-      () => Firebase.getAllDates(),
-      () => LocalStorage.getAllDates()
-    );
-
-  const getGoal = () => LocalStorage.getGoal();
-  const setGoal = (g) => LocalStorage.setGoal(g);
-  const getReminderPrefs = () => LocalStorage.getReminderPrefs();
+  // These always use localStorage (device preferences)
+  const getGoal          = ()  => LocalStorage.getGoal();
+  const setGoal          = (g) => LocalStorage.setGoal(g);
+  const getReminderPrefs = ()  => LocalStorage.getReminderPrefs();
   const setReminderPrefs = (p) => LocalStorage.setReminderPrefs(p);
-  const resetAll = () => Firebase.resetAllData();
+  const resetAll         = ()  => Firebase.resetAllData();
 
-  return {
-    addEntry, getEntriesForDate, getTotalForDate, setTotalForDate,
-    deleteEntry, getAllDates, getGoal, setGoal,
-    getReminderPrefs, setReminderPrefs, resetAll,
-  };
+  return { addEntry, getEntriesForDate, getTotalForDate, setTotalForDate, deleteEntry, getAllDates, getGoal, setGoal, getReminderPrefs, setReminderPrefs, resetAll };
 })();
