@@ -82,12 +82,15 @@ const Storage = (() => {
 
   const tryFirebase = async (fn, fallback) => {
     await waitForFirebase();
-    if (Firebase.isInitialized() && Firebase.getUserId()) {
+    const fbReady = Firebase.isInitialized() && Firebase.getUserId();
+    console.log('[Storage] Firebase ready:', fbReady, '| userId:', Firebase.getUserId());
+    if (fbReady) {
       try { return await fn(); }
       catch(e) {
-        console.warn('Firebase op failed, using localStorage:', e.message);
+        console.warn('[Storage] Firebase op failed, falling back to localStorage:', e.message);
       }
     }
+    console.warn('[Storage] Using localStorage — data NOT synced to cloud');
     return fallback();
   };
 
