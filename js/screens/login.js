@@ -47,12 +47,6 @@ const LoginScreen = (() => {
       <div class="login-title">Water Tracker</div>
       <div class="login-sub" id="loginSubTitle">Sign in to sync your data</div>
 
-      <!-- Tab switcher: Sign In / Sign Up -->
-      <div class="login-tabs" id="loginTabs">
-        <button class="login-tab active" id="tabSignIn" data-tab="signIn">Sign In</button>
-        <button class="login-tab" id="tabSignUp" data-tab="signUp">Sign Up</button>
-      </div>
-
       <!-- VIEW: Sign In -->
       <div id="signInView">
         <button class="google-btn" id="googleSignInBtn">
@@ -86,41 +80,6 @@ const LoginScreen = (() => {
         <button class="login-forgot" id="forgotBtn">Forgot password?</button>
       </div>
 
-      <!-- VIEW: Sign Up -->
-      <div id="signUpView" style="display:none;">
-        <button class="google-btn" id="googleSignUpBtn">
-          ${googleSVG} Continue with Google
-        </button>
-        <div class="login-divider"><span>or</span></div>
-
-        <div class="login-field-group">
-          <label class="login-label">Full Name</label>
-          <input class="login-input" type="text" id="signUpName"
-            placeholder="Your name" autocomplete="name" />
-        </div>
-        <div class="login-field-group">
-          <label class="login-label">Email address</label>
-          <input class="login-input" type="email" id="signUpEmail"
-            placeholder="your@gmail.com" autocomplete="email" />
-        </div>
-        <div class="login-field-group">
-          <label class="login-label">Password</label>
-          <div style="position:relative;">
-            <input class="login-input" type="password" id="signUpPassword"
-              placeholder="Min 6 characters" autocomplete="new-password" style="padding-right:44px;" />
-            <button type="button" id="toggleSignUpPassword" class="pw-toggle-btn">👁</button>
-          </div>
-        </div>
-
-        <div id="signUpError" class="login-error" style="display:none;"></div>
-        <div id="signUpInfo" class="login-info" style="display:none;"></div>
-        <button class="login-btn" id="emailSignUpBtn">Create Account</button>
-
-        <div class="login-sub" style="margin-top:12px;font-size:12px;text-align:center;">
-          By signing up, your account needs to be approved by admin before access is granted.
-        </div>
-      </div>
-
       <!-- VIEW: Forgot Password -->
       <div id="forgotView" style="display:none;">
         <button class="login-back" id="backToLoginBtn">← Back to Sign In</button>
@@ -143,35 +102,26 @@ const LoginScreen = (() => {
   /* ── Bind events ── */
   const bindLoginEvents = () => {
 
-    // Tab switching
-    Utils.el('tabSignIn').addEventListener('click', () => switchTab('signIn'));
-    Utils.el('tabSignUp').addEventListener('click', () => switchTab('signUp'));
-
     // Google Sign In
     Utils.el('googleSignInBtn').addEventListener('click', () => handleGoogle(false));
-    Utils.el('googleSignUpBtn').addEventListener('click', () => handleGoogle(false));
 
     // Email Sign In
     Utils.el('emailSignInBtn').addEventListener('click', handleSignIn);
     Utils.el('loginPassword').addEventListener('keydown', e => { if (e.key === 'Enter') handleSignIn(); });
 
-    // Email Sign Up
-    Utils.el('emailSignUpBtn').addEventListener('click', handleSignUp);
-
     // Toggle passwords
     Utils.el('togglePassword').addEventListener('click', () => togglePw('loginPassword', 'togglePassword'));
-    Utils.el('toggleSignUpPassword').addEventListener('click', () => togglePw('signUpPassword', 'toggleSignUpPassword'));
 
-    // Forgot password
+    // Forgot password — pre-fill email if already typed
     Utils.el('forgotBtn').addEventListener('click', () => {
+      const existingEmail = Utils.el('loginEmail')?.value?.trim();
       Utils.el('signInView').style.display = 'none';
-      Utils.el('loginTabs').style.display  = 'none';
       Utils.el('forgotView').style.display = 'block';
       Utils.el('loginSubTitle').textContent = 'Reset your password';
+      if (existingEmail) Utils.el('resetEmail').value = existingEmail;
     });
     Utils.el('backToLoginBtn').addEventListener('click', () => {
       Utils.el('forgotView').style.display = 'none';
-      Utils.el('loginTabs').style.display  = 'flex';
       Utils.el('signInView').style.display = 'block';
       Utils.el('loginSubTitle').textContent = 'Sign in to sync your data';
     });
@@ -180,14 +130,7 @@ const LoginScreen = (() => {
     Utils.el('sendResetBtn').addEventListener('click', handleResetEmail);
   };
 
-  /* ── Tab switch ── */
-  const switchTab = (tab) => {
-    Utils.el('signInView').style.display = tab === 'signIn' ? 'block' : 'none';
-    Utils.el('signUpView').style.display = tab === 'signUp' ? 'block' : 'none';
-    Utils.el('tabSignIn').classList.toggle('active', tab === 'signIn');
-    Utils.el('tabSignUp').classList.toggle('active', tab === 'signUp');
-    Utils.el('loginSubTitle').textContent = tab === 'signIn' ? 'Sign in to sync your data' : 'Create a new account';
-  };
+
 
   /* ── Google handler ── */
   const handleGoogle = async (isSignUp) => {
@@ -228,51 +171,22 @@ const LoginScreen = (() => {
     }
   };
 
-  /* ── Sign Up handler ── */
-  const handleSignUp = async () => {
-    const name     = Utils.el('signUpName').value.trim();
-    const email    = Utils.el('signUpEmail').value.trim();
-    const password = Utils.el('signUpPassword').value;
 
-    setSignUpError('');
-    setSignUpInfo('');
 
-    if (!name)     { setSignUpError('Please enter your name.'); return; }
-    if (!email)    { setSignUpError('Please enter your email.'); return; }
-    if (!password || password.length < 6) { setSignUpError('Password must be at least 6 characters.'); return; }
-
-    const btn = Utils.el('emailSignUpBtn');
-    btn.textContent = '⏳ Creating account…';
-    btn.disabled = true;
-
-    try {
-      // Create Firebase Auth account
-      await firebase.auth().createUserWithEmailAndPassword(email, password);
-      const user = firebase.auth().currentUser;
-
-      // Update display name
-      await user.updateProfile({ displayName: name });
-
-      // Sign out immediately — account needs admin approval (role in Firestore)
-      await firebase.auth().signOut();
-
-      setSignUpInfo('✅ Account created! Ask your admin to grant you access, then sign in.');
-      btn.textContent = 'Create Account';
-      btn.disabled = false;
-
-      // Switch back to sign in after 3 seconds
-      setTimeout(() => switchTab('signIn'), 3000);
-
-    } catch (e) {
-      let msg = 'Could not create account. Try again.';
-      if (e.code === 'auth/email-already-in-use') msg = 'This email is already registered. Try signing in.';
-      if (e.code === 'auth/invalid-email')        msg = 'Invalid email address.';
-      if (e.code === 'auth/weak-password')        msg = 'Password is too weak. Use at least 6 characters.';
-      setSignUpError(msg);
-      btn.textContent = 'Create Account';
-      btn.disabled = false;
-    }
-  };
+  /* ── Wait for Firebase auth to be ready ── */
+  const waitForAuth = () => new Promise((resolve, reject) => {
+    let attempts = 0;
+    const check = setInterval(() => {
+      attempts++;
+      if (window.firebase && firebase.apps?.length > 0 && firebase.auth) {
+        clearInterval(check);
+        resolve();
+      } else if (attempts > 60) { // 6 seconds
+        clearInterval(check);
+        reject(new Error('Firebase timed out. Please refresh and try again.'));
+      }
+    }, 100);
+  });
 
   /* ── Reset email handler ── */
   const handleResetEmail = async () => {
@@ -291,11 +205,21 @@ const LoginScreen = (() => {
     btn.disabled = true;
 
     try {
+      await waitForAuth();
+      console.log('Sending reset to:', email, '| firebase ready:', !!window.firebase, '| apps:', firebase.apps?.length);
       await firebase.auth().sendPasswordResetEmail(email);
-      Utils.el('resetSuccess').textContent = '✅ Reset email sent! Check your inbox.';
+      Utils.el('resetSuccess').textContent = '✅ Reset email sent! Check your inbox and spam folder.';
       Utils.el('resetSuccess').style.display = 'block';
     } catch (e) {
-      Utils.el('resetError').textContent = 'Could not send reset email. Check the address.';
+      console.error('Reset email error — code:', e.code, '| message:', e.message);
+      let msg = e.message || 'Could not send reset email.';
+      if (e.code === 'auth/user-not-found')       msg = 'No account found with this email.';
+      if (e.code === 'auth/invalid-email')         msg = 'Invalid email address.';
+      if (e.code === 'auth/unauthorized-domain')   msg = 'Domain not authorized. Add it in Firebase Console → Auth → Settings → Authorized domains.';
+      if (e.code === 'auth/too-many-requests')     msg = 'Too many requests. Wait a few minutes and try again.';
+      if (e.code === 'auth/operation-not-allowed') msg = 'Email sign-in not enabled in Firebase Console → Auth → Sign-in methods.';
+      if (e.code === 'auth/missing-android-pkg-name' || e.code === 'auth/missing-continue-uri') msg = 'Firebase config error. Check console.';
+      Utils.el('resetError').textContent = msg;
       Utils.el('resetError').style.display = 'block';
     }
     btn.textContent = 'Send Reset Email';
@@ -317,19 +241,7 @@ const LoginScreen = (() => {
     el.style.display = msg ? 'block' : 'none';
   };
 
-  const setSignUpError = (msg) => {
-    const el = Utils.el('signUpError');
-    if (!el) return;
-    el.textContent = msg;
-    el.style.display = msg ? 'block' : 'none';
-  };
 
-  const setSignUpInfo = (msg) => {
-    const el = Utils.el('signUpInfo');
-    if (!el) return;
-    el.textContent = msg;
-    el.style.display = msg ? 'block' : 'none';
-  };
 
   /* ── Called after successful login ── */
   const onLoginSuccess = (result) => {
