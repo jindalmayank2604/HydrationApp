@@ -1,7 +1,7 @@
 /* ══════════════════════════════════════════
-   SCREEN: Settings — role-gated
-   Admin (jindalmayank2604@gmail.com) → sees everything
-   User  (sampadagupta07@gmail.com)   → sees goal + account only
+   SCREEN: Settings
+   Admin → sees Firebase status + danger zone
+   User  → sees goal + account only
    ══════════════════════════════════════════ */
 
 const SettingsScreen = (() => {
@@ -11,7 +11,6 @@ const SettingsScreen = (() => {
   const renderForRole = () => {
     const isAdmin     = Auth.isAdmin();
     const session     = Auth.getSession();
-    const cfg         = Firebase.getConfig() || {};
     const isConnected = Firebase.isInitialized();
     const email       = session?.email || '';
     const name        = session?.displayName || email.split('@')[0] || 'User';
@@ -51,7 +50,7 @@ const SettingsScreen = (() => {
           </div>
         </div>
 
-        ${isAdmin ? adminOnlyHTML(cfg, isConnected) : userRestrictedBanner()}
+        ${isAdmin ? adminOnlyHTML(isConnected) : userRestrictedBanner()}
 
       </div>
     `;
@@ -59,172 +58,102 @@ const SettingsScreen = (() => {
     bindEvents(isAdmin);
   };
 
-  /* ── HTML only shown to admin ── */
-  const adminOnlyHTML = (cfg, isConnected) => `
+  /* ── Admin-only section ── */
+  const adminOnlyHTML = (isConnected) => `
 
     <!-- Firebase Status -->
     <div class="settings-status-tile ${isConnected ? 'connected' : 'disconnected'}">
       <div class="settings-status-icon">${isConnected ? '🔥' : '📦'}</div>
       <div class="settings-status-info">
-        <div class="settings-status-title">${isConnected ? 'Firebase Connected' : 'Using Local Storage'}</div>
-        <div class="settings-status-sub">${isConnected ? 'Data syncs to Firestore' : 'Data saved locally only'}</div>
+        <div class="settings-status-title">${isConnected ? 'Firebase Connected' : 'Connecting…'}</div>
+        <div class="settings-status-sub">${isConnected ? 'Data syncing to Firestore — separate per user' : 'Not connected yet'}</div>
       </div>
-      ${isConnected ? `<button class="settings-disconnect-btn" id="disconnectBtn">Disconnect</button>` : ''}
-    </div>
-
-    <!-- Firebase Config -->
-    <div class="tile">
-      <div class="settings-section-title">🔥 Firebase Configuration</div>
-      <div class="settings-section-sub">
-        From <a href="https://console.firebase.google.com" target="_blank"
-          style="color:var(--md-primary);font-weight:600;">Firebase Console</a>
-        → Project Settings → Your Apps → Web App
-      </div>
-      <div class="settings-field-group">
-        ${field('apiKey',            'API Key',             cfg.apiKey            || '', 'AIzaSy...')}
-        ${field('authDomain',        'Auth Domain',         cfg.authDomain        || '', 'your-app.firebaseapp.com')}
-        ${field('projectId',         'Project ID',          cfg.projectId         || '', 'your-project-id')}
-        ${field('storageBucket',     'Storage Bucket',      cfg.storageBucket     || '', 'your-app.appspot.com')}
-        ${field('messagingSenderId', 'Messaging Sender ID', cfg.messagingSenderId || '', '123456789')}
-        ${field('appId',             'App ID',              cfg.appId             || '', '1:123:web:abc123')}
-      </div>
-      <div id="firebaseStatus" style="margin:12px 0;min-height:20px;font-size:13px;font-weight:600;"></div>
-      <button class="md-btn md-btn--filled md-btn--full" id="connectFirebaseBtn"
-        style="border-radius:16px;padding:14px;">
-        ${isConnected ? '🔄 Reconnect / Update' : '🔌 Connect to Firebase'}
-      </button>
-    </div>
-
-    <!-- Setup instructions -->
-    <div class="info-banner" style="flex-direction:column;gap:8px;">
-      <div style="font-weight:700;font-size:14px;color:var(--md-primary);">📋 Quick Setup</div>
-      <ol style="font-size:12px;color:var(--md-primary-dark);line-height:2;padding-left:18px;margin:0;">
-        <li>Create project on <strong>console.firebase.google.com</strong></li>
-        <li>Enable <strong>Firestore Database</strong> (Native mode)</li>
-        <li>Enable <strong>Authentication → Google + Anonymous + Email/Password</strong></li>
-        <li>Add Web App → copy config values above</li>
-        <li>Set Firestore rules: <code style="background:#E8EAED;padding:2px 6px;border-radius:4px;">allow read, write: if true;</code></li>
-      </ol>
     </div>
 
     <!-- Danger Zone -->
     <div class="tile" style="border:2px solid #FFCDD2;">
       <div class="settings-section-title" style="color:#D93025;">⚠️ Danger Zone</div>
-      <div class="settings-section-sub">Admin-only. Permanent and cannot be undone.</div>
+      <div class="settings-section-sub">Admin-only. Affects YOUR data only. Permanent.</div>
+      <div id="dangerStatus" style="margin:8px 0;min-height:20px;font-size:13px;font-weight:600;"></div>
       <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px;">
-        <button class="danger-btn" id="resetTodayBtn">🗑 Clear Today's Data</button>
-        <button class="danger-btn danger-btn--hard" id="resetAllBtn">💣 Reset Entire Database</button>
+        <button class="danger-btn" id="resetTodayBtn">🗑 Clear My Today's Data</button>
+        <button class="danger-btn danger-btn--hard" id="resetAllBtn">💣 Reset My Entire History</button>
       </div>
     </div>
   `;
 
-  /* ── Banner shown to non-admin ── */
+  /* ── Non-admin banner ── */
   const userRestrictedBanner = () => `
     <div class="tile locked-banner">
       <div style="display:flex;align-items:center;gap:12px;">
         <span style="font-size:28px;">🔒</span>
         <div>
           <div class="locked-title">Admin Settings Locked</div>
-          <div class="locked-sub">Firebase config and database controls are only accessible to the admin account.</div>
+          <div class="locked-sub">Database controls are only accessible to the admin.</div>
         </div>
       </div>
     </div>
   `;
 
-  const field = (key, label, value, placeholder) => `
-    <div class="settings-field">
-      <label class="md-input-label">${label}</label>
-      <input class="md-input settings-fb-input" type="text"
-        data-key="${key}" value="${Utils.escapeHtml(value)}" placeholder="${placeholder}"
-        autocomplete="off" autocorrect="off" spellcheck="false" />
-    </div>
-  `;
-
-  /* ── Bind events ── */
+  /* ── Events ── */
   const bindEvents = (isAdmin) => {
 
-    /* Sign out — everyone */
+    /* Sign out */
     Utils.el('signOutBtn')?.addEventListener('click', async () => {
       if (!confirm('Sign out?')) return;
       await Auth.signOut();
-      // Reset greeting
-      const g = Utils.el('greeting');
-      if (g) g.textContent = 'Water Tracker';
-      // Navigate to home tab first
+      Firebase.resetUserId();
       Router.navigate('home');
-      // Show login screen on top
       LoginScreen.show();
-      Utils.showToast('👋 Signed out successfully');
+      Utils.showToast('👋 Signed out');
     });
 
-    /* Save goal — everyone */
+    /* Save goal */
     Utils.el('saveGoalBtn')?.addEventListener('click', () => {
       const val = parseInt(Utils.el('goalInput').value);
       if (isNaN(val) || val < 500) { Utils.showToast('⚠️ Minimum goal is 500 ml'); return; }
       Storage.setGoal(val);
       Utils.showToast('🎯 Daily goal updated!');
+      HomeScreen.updateUI();
     });
 
-    if (!isAdmin) return; /* ── below: admin only ── */
+    if (!isAdmin) return;
 
-    /* Connect Firebase */
-    Utils.el('connectFirebaseBtn')?.addEventListener('click', async () => {
-      const config = {};
-      document.querySelectorAll('.settings-fb-input')
-        .forEach(inp => { config[inp.dataset.key] = inp.value.trim(); });
-      if (!config.apiKey || !config.projectId) {
-        setStatus('⚠️ API Key and Project ID are required', 'error'); return;
-      }
-      setStatus('⏳ Connecting to Firebase…', 'loading');
-      Utils.el('connectFirebaseBtn').disabled = true;
-      const result = await Firebase.init(config);
-      if (result.success) {
-        setStatus('✅ Connected! Data now syncs to Firestore.', 'success');
-        const badge = Utils.el('dbBadge');
-        if (badge) { badge.textContent = '🔥'; badge.title = 'Firebase connected'; }
-        setTimeout(renderForRole, 1800);
-      } else {
-        setStatus(`❌ ${result.error}`, 'error');
-        Utils.el('connectFirebaseBtn').disabled = false;
-      }
-    });
-
-    /* Disconnect */
-    Utils.el('disconnectBtn')?.addEventListener('click', () => {
-      if (!confirm('Disconnect Firebase? Falls back to local storage.')) return;
-      Firebase.clearConfig();
-      const badge = Utils.el('dbBadge');
-      if (badge) { badge.textContent = '📦'; badge.title = 'Using local storage'; }
-      renderForRole();
-      Utils.showToast('📦 Switched to local storage');
-    });
-
-    /* Clear today */
+    /* Clear today — only affects logged-in user's Firestore data */
     Utils.el('resetTodayBtn')?.addEventListener('click', async () => {
       if (!confirm("Clear ALL water data for today? Can't be undone.")) return;
-      await Storage.setTotalForDate(Utils.todayString(), 0);
-      Utils.showToast('🗑 Today\'s data cleared');
+      setStatus('⏳ Clearing…', 'loading');
+      try {
+        await Storage.setTotalForDate(Utils.todayString(), 0);
+        setStatus('✅ Today\'s data cleared', 'success');
+        Utils.showToast('🗑 Today\'s data cleared');
+        HomeScreen.updateUI();
+      } catch (e) {
+        setStatus('❌ ' + e.message, 'error');
+      }
     });
 
-    /* Reset entire DB */
+    /* Reset all — only affects logged-in user's Firestore data */
     Utils.el('resetAllBtn')?.addEventListener('click', async () => {
-      if (!confirm('⚠️ Delete ALL water intake history permanently?')) return;
+      if (!confirm('⚠️ Delete ALL your water intake history permanently?')) return;
       if (!confirm('Last chance — are you absolutely sure?')) return;
       setStatus('⏳ Resetting…', 'loading');
       try {
         await Firebase.resetAllData();
-        setStatus('✅ Database reset.', 'success');
-        Utils.showToast('💣 All data wiped');
+        setStatus('✅ Your history wiped', 'success');
+        Utils.showToast('💣 All your data wiped');
+        HomeScreen.updateUI();
       } catch (e) {
-        setStatus(`❌ ${e.message}`, 'error');
+        setStatus('❌ ' + e.message, 'error');
+        Utils.showToast('❌ Reset failed: ' + e.message);
       }
     });
   };
 
   const setStatus = (msg, type) => {
-    const el = Utils.el('firebaseStatus');
+    const el = Utils.el('dangerStatus');
     if (!el) return;
-    const colors = { success:'#137333', error:'#D93025', loading:'#E37400' };
+    const colors = { success: '#137333', error: '#D93025', loading: '#E37400' };
     el.textContent = msg;
     el.style.color = colors[type] || '#202124';
   };

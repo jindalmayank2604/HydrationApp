@@ -12,8 +12,11 @@ const App = (() => {
     // Hide login overlay
     LoginScreen.hide();
 
-    // Set Firebase userId to logged-in user's uid for data isolation
-    if (session.uid) Firebase.setUserId(session.uid);
+    // CRITICAL: set userId immediately so all data ops use correct user path
+    if (session.uid) {
+      Firebase.setUserId(session.uid);
+      console.log('[App] onAuthReady — userId set to:', session.uid, 'email:', session.email);
+    }
 
     // Update header greeting
     const greetingEl = Utils.el('greeting');

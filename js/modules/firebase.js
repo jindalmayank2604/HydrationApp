@@ -4,13 +4,9 @@
    ══════════════════════════════════════════ */
 
 const Firebase = (() => {
-  let db       = null;
-  let userId   = null;
-  let _ready   = false;          // true once Firebase + userId both set
-  let _resolve = null;
-  const _promise = new Promise(r => { _resolve = r; });
-
-  /* ── Scripts hardcoded in index.html now — no dynamic loading ── */
+  let db     = null;
+  let userId = null;
+  let _ready = false;
 
   const HARDCODED_CONFIG = {
     apiKey:            "AIzaSyBbTPBAitCcILlU3ZAOPDVHhqBpG2OTpQo",
@@ -21,15 +17,13 @@ const Firebase = (() => {
     appId:             "1:638415849214:web:117a193c02c8724e1407af",
   };
 
-  /* ── Called once on app start ── */
+  /* ── Init Firestore ── */
   const autoInit = async () => {
     try {
-      if (!firebase.apps.length) {
-        firebase.initializeApp(HARDCODED_CONFIG);
-      }
+      if (!firebase.apps.length) firebase.initializeApp(HARDCODED_CONFIG);
       db = firebase.firestore();
       console.log('[Firebase] Firestore connected');
-      _tryResolve();
+      _checkReady();
       return true;
     } catch (e) {
       console.error('[Firebase] Init failed:', e.message);
@@ -37,45 +31,58 @@ const Firebase = (() => {
     }
   };
 
-  /* ── Set user after login ── */
+  /* ── Set userId after login ── */
   const setUserId = (uid) => {
     if (!uid) return;
     userId = uid;
     console.log('[Firebase] userId set:', uid);
-    _tryResolve();
+    _checkReady();
   };
 
-  const _tryResolve = () => {
-    if (db && userId && !_ready) {
+  /* ── Clear userId on sign out ── */
+  const resetUserId = () => {
+    console.log('[Firebase] userId cleared');
+    userId = null;
+    _ready = false;
+  };
+
+  const _checkReady = () => {
+    if (db && userId) {
       _ready = true;
-      _resolve(true);
-      console.log('[Firebase] ✅ Ready — db + userId both set');
+      console.log('[Firebase] Ready — uid:', userId);
     }
   };
 
-  /* ── Wait until both db and userId are ready ── */
+  /* ── Poll until ready ── */
   const waitUntilReady = (timeoutMs = 6000) => {
     if (_ready) return Promise.resolve(true);
-    return Promise.race([
-      _promise,
-      new Promise(r => setTimeout(() => r(false), timeoutMs))
-    ]);
+    return new Promise(resolve => {
+      let elapsed = 0;
+      const check = setInterval(() => {
+        elapsed += 100;
+        if (db && userId) {
+          _ready = true;
+          clearInterval(check);
+          resolve(true);
+        } else if (elapsed >= timeoutMs) {
+          clearInterval(check);
+          console.warn('[Firebase] Timeout waiting for ready. db:', !!db, 'userId:', userId);
+          resolve(false);
+        }
+      }, 100);
+    });
   };
 
-  /* ── Firestore path: users/{uid}/water_entries ── */
+  /* ── Scoped collection ── */
   const col = () => {
-    if (!db || !userId) throw new Error('Firebase not ready');
+    if (!db)     throw new Error('Firestore not initialized');
+    if (!userId) throw new Error('No userId — user not logged in');
     return db.collection('users').doc(userId).collection('water_entries');
   };
 
   /* ══ CRUD ══ */
-
   const addEntry = async (amount, date) => {
-    await col().add({
-      amount,
-      date,
-      ts: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    await col().add({ amount, date, ts: firebase.firestore.FieldValue.serverTimestamp() });
   };
 
   const getEntriesForDate = async (date) => {
@@ -93,45 +100,42 @@ const Firebase = (() => {
     const batch = db.batch();
     snap.docs.forEach(d => batch.delete(d.ref));
     if (newTotal > 0) {
-      batch.set(col().doc(), {
-        amount: newTotal,
-        date,
-        ts: firebase.firestore.FieldValue.serverTimestamp()
-      });
+      batch.set(col().doc(), { amount: newTotal, date, ts: firebase.firestore.FieldValue.serverTimestamp() });
     }
     await batch.commit();
   };
 
-  const deleteEntry = async (id) => {
-    await col().doc(id).delete();
-  };
+  const deleteEntry = async (id) => { await col().doc(id).delete(); };
 
   const getAllDates = async () => {
     const snap = await col().orderBy('date', 'desc').get();
-    const dates = new Set(snap.docs.map(d => d.data().date));
-    return [...dates].sort().reverse();
+    return [...new Set(snap.docs.map(d => d.data().date))].sort().reverse();
   };
 
   const resetAllData = async () => {
+    if (!db || !userId) throw new Error('Not logged in');
     const snap = await col().get();
     const batch = db.batch();
     snap.docs.forEach(d => batch.delete(d.ref));
     await batch.commit();
     LocalStorage.resetAll();
+    console.log('[Firebase] All data wiped for uid:', userId);
   };
 
-  /* ── Goal & prefs stay in localStorage (device-specific) ── */
-  const getGoal        = ()  => LocalStorage.getGoal();
-  const setGoal        = (g) => LocalStorage.setGoal(g);
-  const getReminderPrefs  = ()  => LocalStorage.getReminderPrefs();
-  const setReminderPrefs  = (p) => LocalStorage.setReminderPrefs(p);
+  /* ── Goal & prefs stay local ── */
+  const getGoal          = ()  => LocalStorage.getGoal();
+  const setGoal          = (g) => LocalStorage.setGoal(g);
+  const getReminderPrefs = ()  => LocalStorage.getReminderPrefs();
+  const setReminderPrefs = (p) => LocalStorage.setReminderPrefs(p);
 
   const isInitialized = () => _ready;
   const getUserId     = () => userId;
+  const getConfig     = () => HARDCODED_CONFIG;
+  const clearConfig   = () => {};
 
   return {
-    autoInit, setUserId, waitUntilReady,
-    isInitialized, getUserId,
+    autoInit, setUserId, resetUserId, waitUntilReady,
+    isInitialized, getUserId, getConfig, clearConfig,
     addEntry, getEntriesForDate, getTotalForDate,
     setTotalForDate, deleteEntry, getAllDates, resetAllData,
     getGoal, setGoal, getReminderPrefs, setReminderPrefs,
