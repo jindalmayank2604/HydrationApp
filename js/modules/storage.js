@@ -59,35 +59,61 @@ const LocalStorage = (() => {
   };
 })();
 
-/* ── Storage proxy — uses Firebase if ready, else LocalStorage ── */
+/* ── Storage proxy — always waits for Firebase before deciding backend ── */
 const Storage = (() => {
-  const addEntry = (amount, date) => {
+
+  // Wait up to 5s for Firebase to finish initializing
+  const waitForFirebase = () => new Promise(resolve => {
+    if (Firebase.isInitialized()) return resolve(true);
+    let attempts = 0;
+    const check = setInterval(() => {
+      attempts++;
+      if (Firebase.isInitialized()) {
+        clearInterval(check);
+        resolve(true);
+      } else if (attempts > 50) { // 5 seconds
+        clearInterval(check);
+        resolve(false);
+      }
+    }, 100);
+  });
+
+  const addEntry = async (amount, date) => {
+    await waitForFirebase();
     if (Firebase.isInitialized()) return Firebase.addEntry(amount, date);
-    LocalStorage.addEntry(amount, date);
-    return Promise.resolve();
+    return LocalStorage.addEntry(amount, date);
   };
-  const getEntriesForDate = (date) => {
+
+  const getEntriesForDate = async (date) => {
+    await waitForFirebase();
     if (Firebase.isInitialized()) return Firebase.getEntriesForDate(date);
-    return Promise.resolve(LocalStorage.getEntriesForDate(date));
+    return LocalStorage.getEntriesForDate(date);
   };
+
   const getTotalForDate = async (date) => {
+    await waitForFirebase();
     if (Firebase.isInitialized()) return Firebase.getTotalForDate(date);
     return LocalStorage.getTotalForDate(date);
   };
-  const setTotalForDate = (date, total) => {
+
+  const setTotalForDate = async (date, total) => {
+    await waitForFirebase();
     if (Firebase.isInitialized()) return Firebase.setTotalForDate(date, total);
-    LocalStorage.setTotalForDate(date, total);
-    return Promise.resolve();
+    return LocalStorage.setTotalForDate(date, total);
   };
-  const deleteEntry = (id) => {
+
+  const deleteEntry = async (id) => {
+    await waitForFirebase();
     if (Firebase.isInitialized()) return Firebase.deleteEntry(id);
-    LocalStorage.deleteEntry(id);
-    return Promise.resolve();
+    return LocalStorage.deleteEntry(id);
   };
-  const getAllDates = () => {
+
+  const getAllDates = async () => {
+    await waitForFirebase();
     if (Firebase.isInitialized()) return Firebase.getAllDates();
-    return Promise.resolve(LocalStorage.getAllDates());
+    return LocalStorage.getAllDates();
   };
+
   const getGoal = () => LocalStorage.getGoal();
   const setGoal = (g) => LocalStorage.setGoal(g);
   const getReminderPrefs = () => LocalStorage.getReminderPrefs();

@@ -152,18 +152,33 @@ const HomeScreen = (() => {
   };
 
   /* ── Adjust water (add or subtract) ── */
+  let isAdjusting = false;
   const adjustWater = async (amount) => {
+    if (isAdjusting) return; // Prevent double-tap
+    isAdjusting = true;
+
     const today = Utils.todayString();
-    if (amount > 0) {
-      await Storage.addEntry(amount, today);
-      Utils.showToast(`+${amount} ml added 💧`);
-    } else {
-      const current = await Storage.getTotalForDate(today);
-      const newTotal = Math.max(0, current + amount); // amount is negative
-      await Storage.setTotalForDate(today, newTotal);
-      Utils.showToast(`${amount} ml removed 📉`);
+    const addBtn = Utils.el('mainAddBtn');
+    if (addBtn && amount > 0) addBtn.style.opacity = '0.6';
+
+    try {
+      if (amount > 0) {
+        await Storage.addEntry(amount, today);
+        Utils.showToast(`+${amount} ml added 💧`);
+      } else {
+        const current = await Storage.getTotalForDate(today);
+        const newTotal = Math.max(0, current + amount);
+        await Storage.setTotalForDate(today, newTotal);
+        Utils.showToast(`${Math.abs(amount)} ml removed 📉`);
+      }
+      await updateUI();
+    } catch (e) {
+      console.error('adjustWater error:', e);
+      Utils.showToast('❌ Could not save. Try again.');
+    } finally {
+      isAdjusting = false;
+      if (addBtn) addBtn.style.opacity = '';
     }
-    updateUI();
   };
 
   /* ── Init ── */

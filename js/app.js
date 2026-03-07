@@ -50,12 +50,16 @@ const App = (() => {
     // Set userId BEFORE autoInit so Firebase uses correct user path from the start
     if (session?.uid) Firebase.setUserId(session.uid);
 
-    // Connect Firebase in background always
+    // Connect Firebase in background — set userId immediately when ready
     Firebase.autoInit().then(ok => {
       const badge = Utils.el('dbBadge');
       if (badge) badge.textContent = ok ? '🔥' : '📦';
-      // Re-set userId after autoInit in case it got overwritten
-      if (session?.uid) Firebase.setUserId(session.uid);
+      // Always re-set userId after init — critical for data isolation
+      const currentSession = Auth.getSession();
+      if (currentSession?.uid) {
+        Firebase.setUserId(currentSession.uid);
+        console.log('Firebase ready, userId set:', currentSession.uid);
+      }
     });
 
     if (session && session.rememberMe) {
