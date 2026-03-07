@@ -1,0 +1,84 @@
+/* ══════════════════════════════════════════
+   DESIGN TOKENS — Google Home aesthetic
+   ══════════════════════════════════════════ */
+
+:root {
+  /* ── Color Palette ── */
+  --md-primary:        #1A73E8;
+  --md-primary-light:  #D2E3FC;
+  --md-primary-dark:   #1557B0;
+  --md-on-primary:     #FFFFFF;
+
+  --md-secondary:      #137333;
+  --md-secondary-light:#CEEAD6;
+
+  --md-surface:        #FFFFFF;
+  --md-surface-1:      #F8F9FA;
+  --md-surface-2:      #F1F3F4;
+  --md-surface-3:      #E8EAED;
+
+  --md-background:     #F1F3F4;
+  --md-on-background:  #202124;
+
+  --md-error:          #D93025;
+  --md-error-light:    #FCE8E6;
+  --md-warning:        #E37400;
+  --md-warning-light:  #FEF0CD;
+  --md-success:        #137333;
+  --md-success-light:  #CEEAD6;
+
+  --md-outline:        #DADCE0;
+  --md-on-surface:     #202124;
+  --md-on-surface-med: #5F6368;
+  --md-on-surface-low: #9AA0A6;
+
+  /* Water specific */
+  --water-low:         #EA4335;
+  --water-mid:         #FBBC04;
+  --water-good:        #34A853;
+  --water-full:        #1A73E8;
+  --water-gradient:    linear-gradient(180deg, #4FC3F7 0%, #1A73E8 100%);
+
+  /* ── Typography ── */
+  --font-display:      'Google Sans Display', 'Google Sans', sans-serif;
+  --font-body:         'Google Sans', sans-serif;
+
+  --text-display:      clamp(28px, 7vw, 40px);
+  --text-headline:     clamp(20px, 5vw, 28px);
+  --text-title:        18px;
+  --text-body:         14px;
+  --text-label:        12px;
+  --text-micro:        11px;
+
+  /* ── Spacing ── */
+  --space-xs:   4px;
+  --space-sm:   8px;
+  --space-md:   16px;
+  --space-lg:   24px;
+  --space-xl:   32px;
+
+  /* ── Radii (Google Home uses rounded tiles) ── */
+  --radius-sm:  8px;
+  --radius-md:  16px;
+  --radius-lg:  24px;
+  --radius-xl:  28px;
+  --radius-pill:99px;
+
+  /* ── Elevation ── */
+  --shadow-1:   0 1px 3px rgba(60,64,67,.15), 0 1px 2px rgba(60,64,67,.12);
+  --shadow-2:   0 2px 6px rgba(60,64,67,.15), 0 1px 4px rgba(60,64,67,.12);
+  --shadow-3:   0 4px 12px rgba(60,64,67,.15), 0 2px 6px rgba(60,64,67,.10);
+
+  /* ── Transitions ── */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-decel:    cubic-bezier(0, 0, 0, 1);
+  --ease-accel:    cubic-bezier(0.3, 0, 1, 1);
+  --dur-short:     150ms;
+  --dur-med:       300ms;
+  --dur-long:      500ms;
+
+  /* ── Layout ── */
+  --nav-height:    68px;
+  --header-height: 64px;
+  --max-width:     600px;
+}

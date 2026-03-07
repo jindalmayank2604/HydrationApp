@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Water Tracker</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#1A73E8" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Water Tracker" />
+  <link rel="apple-touch-icon" href="assets/icon-192.png" />
+
+
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Google+Sans+Display:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/screens.css" />
+
+  <style>
+    /* ══════════════════════════════════════════
+       LOGIN OVERLAY
+    ══════════════════════════════════════════ */
+    #loginOverlay { position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px; }
+    .login-card {
+      background: #fff;
+      border-radius: 28px;
+      padding: 32px 24px 28px;
+      width: 100%; max-width: 380px;
+      box-shadow: 0 8px 40px rgba(26,115,232,0.18);
+    }
+    .login-logo { text-align:center; font-size: 52px; margin-bottom: 8px; }
+    .login-title { text-align:center; font-size:22px; font-weight:700; color:#202124; margin-bottom:4px; }
+    .login-sub   { text-align:center; font-size:13px; color:#5F6368; margin-bottom:16px; }
+
+    /* Tabs */
+    .login-tabs  { display:flex; gap:4px; background:#F1F3F4; border-radius:12px; padding:4px; margin-bottom:20px; }
+    .login-tab   { flex:1; padding:8px; border:none; border-radius:9px; background:transparent; font-size:14px; font-weight:600; color:#5F6368; cursor:pointer; transition:all 150ms; }
+    .login-tab.active { background:#fff; color:#1A73E8; box-shadow:0 1px 4px rgba(0,0,0,0.15); }
+
+    /* Google button */
+    .google-btn  { width:100%; display:flex; align-items:center; justify-content:center; gap:10px; padding:12px; border:1.5px solid #DADCE0; border-radius:12px; background:#fff; font-size:14px; font-weight:600; cursor:pointer; transition:all 150ms; margin-bottom:16px; color:#202124; }
+    .google-btn:hover { background:#F8F9FA; }
+
+    /* Divider */
+    .login-divider { display:flex; align-items:center; gap:10px; margin:0 0 16px; color:#9AA0A6; font-size:12px; }
+    .login-divider::before,.login-divider::after { content:''; flex:1; height:1px; background:#DADCE0; }
+
+    /* Fields */
+    .login-field-group { margin-bottom:14px; }
+    .login-label  { display:block; font-size:12px; font-weight:600; color:#5F6368; margin-bottom:6px; }
+    .login-input  { width:100%; padding:11px 14px; border:1.5px solid #DADCE0; border-radius:10px; font-size:14px; color:#202124; background:#fff; box-sizing:border-box; outline:none; transition:border 150ms; }
+    .login-input:focus { border-color:#1A73E8; }
+    .pw-toggle-btn { position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;color:#5F6368;font-size:18px; }
+
+    /* Error / info */
+    .login-error  { background:#FFF0F0; border:1px solid #FFCDD2; color:#D93025; border-radius:8px; padding:10px 12px; font-size:13px; margin-bottom:12px; }
+    .login-info   { background:#E8F5E9; border:1px solid #A5D6A7; color:#2E7D32; border-radius:8px; padding:10px 12px; font-size:13px; margin-bottom:12px; }
+
+    /* Main button */
+    .login-btn    { width:100%; padding:13px; background:#1A73E8; color:#fff; border:none; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer; transition:all 150ms; margin-bottom:12px; }
+    .login-btn:hover  { background:#1557B0; }
+    .login-btn:active { transform:scale(0.97); }
+
+    /* Remember me */
+    .remember-row { display:flex; align-items:center; margin-bottom:10px; }
+    .remember-label { display:flex; align-items:center; gap:8px; font-size:13px; color:#5F6368; cursor:pointer; }
+
+    /* Forgot / back */
+    .login-forgot { background:none; border:none; color:#1A73E8; font-size:13px; cursor:pointer; padding:0; width:100%; text-align:center; }
+    .login-back   { background:none; border:none; color:#1A73E8; font-size:13px; cursor:pointer; padding:0; margin-bottom:16px; display:block; }
+    .login-section-title { font-size:18px; font-weight:700; color:#202124; margin-bottom:6px; }
+    .login-section-sub   { font-size:13px; color:#5F6368; margin-bottom:16px; }
+
+    /* Admin / role badges */
+    .admin-badge  { display:inline-block; background:#FFF3E0; color:#E37400; border:1px solid #FFB74D; border-radius:6px; font-size:11px; font-weight:700; padding:2px 8px; margin-left:6px; vertical-align:middle; }
+    .role-badge   { display:inline-block; border-radius:6px; font-size:11px; font-weight:700; padding:2px 8px; }
+    .role-badge--admin { background:#FFF3E0; color:#E37400; border:1px solid #FFB74D; }
+    .role-badge--user  { background:#E8F0FE; color:#1A73E8; border:1px solid #A8C7FA; }
+
+    /* ══════════════════════════════════════════
+       DARK MODE — complete overhaul
+    ══════════════════════════════════════════ */
+    body.dark-mode {
+      --md-background:     #111318;
+      --md-surface:        #1E2128;
+      --md-surface-1:      #1E2128;
+      --md-surface-2:      #282D36;
+      --md-surface-3:      #33383F;
+      --md-on-background:  #E3E3E8;
+      --md-on-surface:     #E3E3E8;
+      --md-on-surface-med: #8A8F9A;
+      background-color: #111318 !important;
+    }
+
+    /* Layout */
+    body.dark-mode .app-main    { background: #111318 !important; }
+    body.dark-mode .screen      { background: #111318 !important; }
+
+    /* Header */
+    body.dark-mode .app-header  { background: linear-gradient(135deg,#1A3A6E,#0D2A5C) !important; }
+    body.dark-mode .header-greeting { color: #E3E3E8 !important; }
+    body.dark-mode .header-date     { color: rgba(255,255,255,0.7) !important; }
+    body.dark-mode .admin-badge     { background:#3A2A10 !important; color:#FFB74D !important; border-color:#7A5A20 !important; }
+
+    /* Bottom nav */
+    body.dark-mode .bottom-nav     { background:#1E2128 !important; border-top:1px solid #33383F !important; }
+    body.dark-mode .nav-item       { color:#8A8F9A !important; }
+    body.dark-mode .nav-item.active { color:#64B5F6 !important; }
+    body.dark-mode .nav-label      { color:inherit !important; }
+
+    /* All tiles */
+    body.dark-mode .tile           { background:#1E2128 !important; border-color:#33383F !important; box-shadow:0 2px 8px rgba(0,0,0,0.4) !important; }
+    body.dark-mode .tile--surface2 { background:#282D36 !important; }
+
+    /* Home hero */
+    body.dark-mode .home-hero      { background:linear-gradient(135deg,#1A3A6E,#0D2A5C) !important; }
+
+    /* Main add / sub buttons */
+    body.dark-mode .main-add-btn   { background:#1E2128 !important; border-color:#33383F !important; }
+    body.dark-mode .main-add-title { color:#E3E3E8 !important; }
+    body.dark-mode .main-add-sub   { color:#8A8F9A !important; }
+    body.dark-mode .main-sub-btn   { background:#2A1A1A !important; border-color:#6A2A2A !important; color:#EF9A9A !important; }
+
+    /* Quick add tiles */
+    body.dark-mode .add-tile       { background:#1E2128 !important; border-color:#33383F !important; }
+    body.dark-mode .add-tile-val   { color:#64B5F6 !important; }
+    body.dark-mode .add-tile-unit  { color:#8A8F9A !important; }
+
+    /* Stat chips */
+    body.dark-mode .stat-chip      { background:#282D36 !important; }
+    body.dark-mode .stat-value     { color:#E3E3E8 !important; }
+    body.dark-mode .stat-key       { color:#8A8F9A !important; }
+
+    /* Section labels */
+    body.dark-mode .section-label  { color:#8A8F9A !important; }
+    body.dark-mode .section-header { border-color:#33383F !important; }
+
+    /* Inputs */
+    body.dark-mode .md-input       { background:#282D36 !important; border-color:#44495A !important; color:#E3E3E8 !important; }
+    body.dark-mode .md-input:focus { border-color:#64B5F6 !important; }
+    body.dark-mode .md-input-label { color:#8A8F9A !important; }
+    body.dark-mode .pill           { background:#282D36 !important; border-color:#44495A !important; color:#E3E3E8 !important; }
+    body.dark-mode .pill.active    { background:#1A3A6E !important; border-color:#64B5F6 !important; color:#64B5F6 !important; }
+
+    /* Banners */
+    body.dark-mode .info-banner    { background:#1A2744 !important; border-color:#2A3F6F !important; }
+    body.dark-mode .info-banner-text { color:#B0BEC5 !important; }
+
+    /* Reminder */
+    body.dark-mode .reminder-status-tile.on  { background:#1A2E1A !important; border-color:#2A5A2A !important; }
+    body.dark-mode .reminder-status-tile.off { background:#282D36 !important; }
+    body.dark-mode .switch-title   { color:#E3E3E8 !important; }
+    body.dark-mode .switch-sub     { color:#8A8F9A !important; }
+
+    /* Settings */
+    body.dark-mode .settings-account-tile  { background:#1E2128 !important; }
+    body.dark-mode .settings-account-name  { color:#E3E3E8 !important; }
+    body.dark-mode .settings-account-email { color:#8A8F9A !important; }
+    body.dark-mode .settings-account-avatar { background:#1A3A6E !important; color:#64B5F6 !important; }
+    body.dark-mode .settings-section-title { color:#E3E3E8 !important; }
+    body.dark-mode .settings-section-sub   { color:#8A8F9A !important; }
+    body.dark-mode .settings-status-tile           { background:#282D36 !important; border-color:#33383F !important; }
+    body.dark-mode .settings-status-tile.connected    { background:#1A2E1A !important; border-color:#2A5A2A !important; }
+    body.dark-mode .settings-status-tile.disconnected { background:#2E2A1A !important; border-color:#5A4A2A !important; }
+    body.dark-mode .settings-status-title { color:#E3E3E8 !important; }
+    body.dark-mode .settings-status-sub   { color:#8A8F9A !important; }
+    body.dark-mode .locked-banner  { border-color:#33383F !important; }
+    body.dark-mode .locked-title   { color:#E3E3E8 !important; }
+    body.dark-mode .locked-sub     { color:#8A8F9A !important; }
+    body.dark-mode .role-badge--user  { background:#1A2E4A !important; color:#64B5F6 !important; border-color:#2A4A7A !important; }
+    body.dark-mode .role-badge--admin { background:#3A2A10 !important; color:#FFB74D !important; border-color:#7A5A20 !important; }
+    body.dark-mode .md-btn--outlined  { border-color:#44495A !important; color:#64B5F6 !important; }
+    body.dark-mode .danger-btn        { background:#3A1A1A !important; border-color:#6A2A2A !important; color:#EF9A9A !important; }
+
+    /* History */
+    body.dark-mode .cal-header       { color:#8A8F9A !important; }
+    body.dark-mode .cal-month-label  { color:#E3E3E8 !important; }
+    body.dark-mode .cal-day          { color:#8A8F9A !important; }
+    body.dark-mode .cal-day.today    { background:#1A3A6E !important; color:#64B5F6 !important; }
+    body.dark-mode .cal-day.has-data::after { background:#64B5F6 !important; }
+    body.dark-mode .hist-edit-panel  { background:#1E2128 !important; border-color:#33383F !important; }
+    body.dark-mode .hist-date-label  { color:#E3E3E8 !important; }
+    body.dark-mode .hist-empty       { color:#8A8F9A !important; }
+
+    /* Login overlay - dark mode */
+    body.dark-mode #loginOverlay     { background:linear-gradient(135deg,#0D1B2A,#1A237E 50%,#0D1B2A) !important; }
+    body.dark-mode .login-card       { background:#1E2128 !important; box-shadow:0 8px 40px rgba(0,0,0,0.6) !important; }
+    body.dark-mode .login-title      { color:#E3E3E8 !important; }
+    body.dark-mode .login-sub        { color:#8A8F9A !important; }
+    body.dark-mode .login-tabs       { background:#282D36 !important; }
+    body.dark-mode .login-tab        { color:#8A8F9A !important; }
+    body.dark-mode .login-tab.active { background:#33383F !important; color:#64B5F6 !important; }
+    body.dark-mode .login-label      { color:#8A8F9A !important; }
+    body.dark-mode .login-input      { background:#282D36 !important; border-color:#44495A !important; color:#E3E3E8 !important; }
+    body.dark-mode .login-input:focus { border-color:#64B5F6 !important; }
+    body.dark-mode .login-input::placeholder { color:#5A5F6A !important; }
+    body.dark-mode .pw-toggle-btn    { color:#8A8F9A !important; }
+    body.dark-mode .google-btn       { background:#282D36 !important; border-color:#44495A !important; color:#E3E3E8 !important; }
+    body.dark-mode .google-btn:hover { background:#33383F !important; }
+    body.dark-mode .login-divider    { color:#8A8F9A !important; }
+    body.dark-mode .login-divider::before,
+    body.dark-mode .login-divider::after { background:#44495A !important; }
+    body.dark-mode .login-error      { background:#2A1A1A !important; border-color:#6A2A2A !important; color:#EF9A9A !important; }
+    body.dark-mode .login-info       { background:#1A2E1A !important; border-color:#2A5A2A !important; color:#A5D6A7 !important; }
+    body.dark-mode .login-forgot     { color:#64B5F6 !important; }
+    body.dark-mode .login-back       { color:#64B5F6 !important; }
+    body.dark-mode .login-section-title { color:#E3E3E8 !important; }
+    body.dark-mode .login-section-sub   { color:#8A8F9A !important; }
+    body.dark-mode .remember-label   { color:#8A8F9A !important; }
+  </style>
+</head>
+<body>
+
+  <!-- ── HEADER ── -->
+  <header class="app-header" id="appHeader">
+    <div class="header-left">
+      <div class="header-avatar">💧</div>
+      <div class="header-text">
+        <div class="header-greeting" id="greeting">Water Tracker</div>
+        <div class="header-date" id="headerDate"></div>
+      </div>
+    </div>
+    <div class="header-right">
+      <button id="darkModeToggle" aria-label="Toggle dark mode"
+        style="background:none;border:none;cursor:pointer;font-size:22px;padding:6px;border-radius:50%;transition:background 150ms;"
+        title="Toggle dark/light mode">🌙</button>
+    </div>
+  </header>
+
+  <!-- ── MAIN CONTENT ── -->
+  <main class="app-main">
+    <section class="screen active" id="screen-home">
+      <div id="home-root"></div>
+    </section>
+    <section class="screen" id="screen-history">
+      <div id="history-root"></div>
+    </section>
+    <section class="screen" id="screen-reminder">
+      <div id="reminder-root"></div>
+    </section>
+    <section class="screen" id="screen-settings">
+      <div id="settings-root"></div>
+    </section>
+  </main>
+
+  <!-- ── BOTTOM NAV ── -->
+  <nav class="bottom-nav" role="navigation">
+    <button class="nav-item active" data-screen="home">
+      <div class="nav-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+      </div>
+      <span class="nav-label">Home</span>
+    </button>
+    <button class="nav-item" data-screen="history">
+      <div class="nav-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
+      </div>
+      <span class="nav-label">History</span>
+    </button>
+    <button class="nav-item" data-screen="reminder">
+      <div class="nav-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+      </div>
+      <span class="nav-label">Reminder</span>
+    </button>
+    <button class="nav-item" data-screen="settings">
+      <div class="nav-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </div>
+      <span class="nav-label">Settings</span>
+    </button>
+  </nav>
+
+  <!-- ── TOAST ── -->
+  <div class="toast" id="toast" role="alert" aria-live="polite"></div>
+
+  <!-- Show login overlay IMMEDIATELY — skip if rememberMe session valid -->
+  <script>
+    (function() {
+      // Check if valid rememberMe session exists
+      const hasRememberMe = (() => {
+        try {
+          const s = JSON.parse(localStorage.getItem('wt_session_v1'));
+          if (!s || !s.rememberMe) return false;
+          if (Date.now() - s.savedAt > 30 * 24 * 60 * 60 * 1000) return false;
+          return true;
+        } catch { return false; }
+      })();
+
+      if (!hasRememberMe) {
+        // Show loading spinner immediately while JS loads
+        const overlay = document.createElement('div');
+        overlay.id = 'loginOverlay';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,#E8F0FE,#D2E3FC 50%,#C5E1F5);display:flex;align-items:center;justify-content:center;padding:16px;';
+        overlay.innerHTML = '<div style="background:#fff;border-radius:28px;padding:32px 24px;width:100%;max-width:380px;box-shadow:0 8px 40px rgba(26,115,232,.18);text-align:center;"><div style="font-size:52px;">💧</div><div style="font-family:Google Sans,sans-serif;font-size:22px;font-weight:700;color:#202124;margin:8px 0 4px;">Water Tracker</div><div style="font-size:13px;color:#5F6368;margin-bottom:20px;">Signing you in...</div><div style="width:40px;height:40px;border:4px solid #D2E3FC;border-top-color:#1A73E8;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto;"></div></div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>';
+        document.body.appendChild(overlay);
+      }
+    })();
+  </script>
+
+  <!-- ── SCRIPTS (order matters) ── -->
+  <script src="js/modules/firebase.js"></script>
+  <script src="js/modules/storage.js"></script>
+  <script src="js/modules/notifications.js"></script>
+  <script src="js/modules/utils.js"></script>
+  <script src="js/modules/router.js"></script>
+  <script src="js/modules/auth.js"></script>
+  <script src="js/screens/login.js"></script>
+  <script src="js/screens/home.js"></script>
+  <script src="js/screens/history.js"></script>
+  <script src="js/screens/reminder.js"></script>
+  <script src="js/screens/settings.js"></script>
+  <script src="js/app.js"></script>
+
+  <!-- Dark Mode Script -->
+  <script>
+    (function() {
+      // Apply saved dark mode immediately to avoid flash
+      if (localStorage.getItem('wt_dark_mode') === 'true') {
+        document.body.classList.add('dark-mode');
+      }
+    })();
+  </script>
+
+  <!-- Service Worker -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      });
+    }
+  </script>
+
+  <!-- Install banner -->
+  <div id="installBanner" style="display:none;position:fixed;bottom:80px;left:16px;right:16px;background:#fff;border-radius:20px;padding:16px 20px;box-shadow:0 4px 24px rgba(0,0,0,0.15);z-index:300;align-items:center;gap:12px;">
+    <img src="assets/icon-192.png" width="40" height="40" style="border-radius:10px;" />
+    <div style="flex:1;">
+      <div style="font-weight:700;font-size:14px;font-family:'Google Sans',sans-serif;">Install Water Tracker</div>
+      <div style="font-size:12px;color:#5F6368;margin-top:2px;">Add to home screen for quick access</div>
+    </div>
+    <button id="installBtn" style="background:#1A73E8;color:#fff;border:none;border-radius:99px;padding:8px 16px;font-weight:700;font-size:13px;cursor:pointer;">Install</button>
+    <button id="dismissBanner" style="background:none;border:none;font-size:20px;cursor:pointer;color:#5F6368;padding:0 4px;">✕</button>
+  </div>
+  <script>
+    let deferredPrompt;
+    const banner = document.getElementById('installBanner');
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault(); deferredPrompt = e; banner.style.display = 'flex';
+    });
+    document.getElementById('installBtn')?.addEventListener('click', async () => {
+      banner.style.display = 'none';
+      if (deferredPrompt) { deferredPrompt.prompt(); deferredPrompt = null; }
+    });
+    document.getElementById('dismissBanner')?.addEventListener('click', () => {
+      banner.style.display = 'none';
+    });
+  </script>
+</body>
+</html>
