@@ -62,57 +62,70 @@ const LocalStorage = (() => {
 /* ── Storage proxy — always waits for Firebase before deciding backend ── */
 const Storage = (() => {
 
-  // Wait up to 5s for Firebase to finish initializing
+  // Wait up to 5s for Firebase to be initialized AND userId to be set
   const waitForFirebase = () => new Promise(resolve => {
-    if (Firebase.isInitialized()) return resolve(true);
+    const isReady = () => Firebase.isInitialized() && Firebase.getUserId();
+    if (isReady()) return resolve(true);
     let attempts = 0;
     const check = setInterval(() => {
       attempts++;
-      if (Firebase.isInitialized()) {
+      if (isReady()) {
         clearInterval(check);
         resolve(true);
-      } else if (attempts > 50) { // 5 seconds
+      } else if (attempts > 50) { // 5 seconds max
         clearInterval(check);
-        resolve(false);
+        // Resolve anyway — will use LocalStorage as fallback
+        resolve(Firebase.isInitialized());
       }
     }, 100);
   });
 
-  const addEntry = async (amount, date) => {
+  const tryFirebase = async (fn, fallback) => {
     await waitForFirebase();
-    if (Firebase.isInitialized()) return Firebase.addEntry(amount, date);
-    return LocalStorage.addEntry(amount, date);
+    if (Firebase.isInitialized() && Firebase.getUserId()) {
+      try { return await fn(); }
+      catch(e) {
+        console.warn('Firebase op failed, using localStorage:', e.message);
+      }
+    }
+    return fallback();
   };
 
-  const getEntriesForDate = async (date) => {
-    await waitForFirebase();
-    if (Firebase.isInitialized()) return Firebase.getEntriesForDate(date);
-    return LocalStorage.getEntriesForDate(date);
-  };
+  const addEntry = (amount, date) =>
+    tryFirebase(
+      () => Firebase.addEntry(amount, date),
+      () => LocalStorage.addEntry(amount, date)
+    );
 
-  const getTotalForDate = async (date) => {
-    await waitForFirebase();
-    if (Firebase.isInitialized()) return Firebase.getTotalForDate(date);
-    return LocalStorage.getTotalForDate(date);
-  };
+  const getEntriesForDate = (date) =>
+    tryFirebase(
+      () => Firebase.getEntriesForDate(date),
+      () => LocalStorage.getEntriesForDate(date)
+    );
 
-  const setTotalForDate = async (date, total) => {
-    await waitForFirebase();
-    if (Firebase.isInitialized()) return Firebase.setTotalForDate(date, total);
-    return LocalStorage.setTotalForDate(date, total);
-  };
+  const getTotalForDate = (date) =>
+    tryFirebase(
+      () => Firebase.getTotalForDate(date),
+      () => LocalStorage.getTotalForDate(date)
+    );
 
-  const deleteEntry = async (id) => {
-    await waitForFirebase();
-    if (Firebase.isInitialized()) return Firebase.deleteEntry(id);
-    return LocalStorage.deleteEntry(id);
-  };
+  const setTotalForDate = (date, total) =>
+    tryFirebase(
+      () => Firebase.setTotalForDate(date, total),
+      () => LocalStorage.setTotalForDate(date, total)
+    );
 
-  const getAllDates = async () => {
-    await waitForFirebase();
-    if (Firebase.isInitialized()) return Firebase.getAllDates();
-    return LocalStorage.getAllDates();
-  };
+  const deleteEntry = (id) =>
+    tryFirebase(
+      () => Firebase.deleteEntry(id),
+      () => LocalStorage.deleteEntry(id)
+    );
+
+  const getAllDates = () =>
+    tryFirebase(
+      () => Firebase.getAllDates(),
+      () => LocalStorage.getAllDates()
+    );
 
   const getGoal = () => LocalStorage.getGoal();
   const setGoal = (g) => LocalStorage.setGoal(g);

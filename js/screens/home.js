@@ -173,8 +173,8 @@ const HomeScreen = (() => {
       }
       await updateUI();
     } catch (e) {
-      console.error('adjustWater error:', e);
-      Utils.showToast('❌ Could not save. Try again.');
+      console.error('adjustWater error:', e.message);
+      Utils.showToast('❌ Error: ' + e.message);
     } finally {
       isAdjusting = false;
       if (addBtn) addBtn.style.opacity = '';

@@ -100,8 +100,11 @@ const Firebase = (() => {
   /* ── CRUD helpers ── */
   const userDoc = (path) => {
     if (!db) throw new Error('Firebase DB not initialized');
-    if (!userId) throw new Error('User not authenticated - no userId set');
-    return db.collection('users').doc(userId).collection(path);
+    // Use our stored userId, OR fall back to Firebase Auth current user
+    const uid = userId || (window.firebase && firebase.auth().currentUser?.uid);
+    if (!uid) throw new Error('User not authenticated - no userId set');
+    if (!userId) userId = uid; // cache it
+    return db.collection('users').doc(uid).collection(path);
   };
 
   /* ── Get current userId (for debugging) ── */
@@ -109,7 +112,10 @@ const Firebase = (() => {
 
   /* ── Add water entry ── */
   const addEntry = async (amount, date) => {
-    if (!initialized) return LocalStorage.addEntry(amount, date);
+    if (!initialized || !userId) {
+      console.warn('Firebase not ready, saving to LocalStorage. initialized:', initialized, 'userId:', userId);
+      return LocalStorage.addEntry(amount, date);
+    }
     const entry = { amount, date, timestamp: firebase.firestore.FieldValue.serverTimestamp() };
     await userDoc('water_entries').add(entry);
   };
