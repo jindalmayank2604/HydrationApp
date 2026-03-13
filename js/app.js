@@ -34,6 +34,9 @@ const App = (() => {
       SettingsScreen.renderForRole();
     }
 
+    // Sync shared drinks from Firestore for ALL users
+    Drinks.syncFromFirestore().catch(() => {});
+
     Utils.showToast(isAdmin ? '🔑 Admin access granted' : '👋 Welcome back!');
   };
 
@@ -102,5 +105,6 @@ document.addEventListener('DOMContentLoaded', () => {
       darkToggle.textContent = nowDark ? '☀️' : '🌙';
     });
   }
+  Utils.initRipples();
   App.init();
 });

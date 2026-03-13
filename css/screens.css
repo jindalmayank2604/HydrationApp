@@ -534,3 +534,209 @@ body.dark-mode .an-pill.active {
   border-color: var(--md-primary);
   color: #fff;
 }
+
+/* ══════════════════════════════════════════
+   DRINKS — bottom sheet + home button
+   ══════════════════════════════════════════ */
+
+/* Other Drink button on home */
+.other-drink-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 13px 16px;
+  background: var(--md-surface);
+  border: 1.5px solid var(--md-outline);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--md-on-surface-med);
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: background var(--dur-short);
+  box-sizing: border-box;
+}
+.other-drink-btn:active { background: var(--md-surface-2); }
+body.dark-mode .other-drink-btn { background: #2A2D35; border-color: #3D4148; color: #8A8F9A; }
+
+/* Sheet overlay */
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+/* Bottom sheet */
+.drink-sheet {
+  background: var(--md-surface);
+  border-radius: 24px 24px 0 0;
+  padding: 16px 20px 32px;
+  width: 100%;
+  max-width: var(--max-width);
+  transform: translateY(100%);
+  transition: transform 0.3s cubic-bezier(0, 0, 0, 1);
+  box-sizing: border-box;
+}
+.drink-sheet.open { transform: translateY(0); }
+body.dark-mode .drink-sheet { background: #1E2128; }
+
+.sheet-handle {
+  width: 36px; height: 4px;
+  background: var(--md-outline);
+  border-radius: 2px;
+  margin: 0 auto 16px;
+}
+.sheet-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--md-on-surface);
+  margin-bottom: 16px;
+}
+
+/* Drink tile grid */
+.drink-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.drink-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 12px 8px;
+  background: var(--md-surface-2);
+  border: 2px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--dur-short);
+  font-family: var(--font-body);
+}
+.drink-tile:active  { transform: scale(0.95); }
+.drink-tile.selected {
+  background: var(--md-primary-light);
+  border-color: var(--md-primary);
+}
+body.dark-mode .drink-tile          { background: #2A2D35; }
+body.dark-mode .drink-tile.selected { background: #1A2C4E; border-color: #1A73E8; }
+
+.drink-tile-emoji { font-size: 24px; }
+.drink-tile-name  { font-size: 11px; font-weight: 600; color: var(--md-on-surface); text-align:center; }
+.drink-tile-pct   { font-size: 10px; color: var(--md-on-surface-med); }
+
+/* Amount row */
+.sheet-amount-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.sheet-amt-btn {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: var(--md-surface-2);
+  border: 1.5px solid var(--md-outline);
+  font-size: 22px;
+  font-weight: 300;
+  color: var(--md-on-surface);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.sheet-amt-btn:active { background: var(--md-surface-3); }
+.sheet-amt-display {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px;
+  background: var(--md-surface-2);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+}
+.sheet-amt-unit {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--md-on-surface-med);
+}
+
+/* Equivalent hint */
+.sheet-equiv {
+  text-align: center;
+  font-size: 12px;
+  color: var(--md-on-surface-med);
+  margin-bottom: 16px;
+  min-height: 16px;
+}
+
+/* Log button */
+.sheet-log-btn {
+  width: 100%;
+  padding: 14px;
+  background: var(--md-primary);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: opacity var(--dur-short);
+}
+.sheet-log-btn:active { opacity: 0.85; }
+
+/* ══ Drinks manager in settings ══ */
+.drink-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--md-surface-1);
+  border-radius: var(--radius-md);
+  border: 0.5px solid var(--md-outline);
+}
+body.dark-mode .drink-row { background: #2A2D35; border-color: #3D4148; }
+
+.drink-row-emoji { font-size: 22px; flex-shrink: 0; }
+.drink-row-info  { flex: 1; min-width: 0; }
+.drink-row-name  { font-size: 13px; font-weight: 600; color: var(--md-on-surface); }
+.drink-row-pct   { font-size: 11px; color: var(--md-on-surface-med); }
+
+.drink-row-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--md-secondary);
+  background: var(--md-secondary-light);
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+}
+.drink-row-edit {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--md-primary);
+  background: var(--md-primary-light);
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 4px 10px;
+  cursor: pointer;
+  font-family: var(--font-body);
+  flex-shrink: 0;
+}
+.drink-row-del {
+  font-size: 13px;
+  color: var(--md-error);
+  background: var(--md-error-light);
+  border: none;
+  border-radius: 50%;
+  width: 28px; height: 28px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}

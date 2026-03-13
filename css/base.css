@@ -19,9 +19,16 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── Centered max-width wrapper ── */
-.app-header,
-.app-main,
+/* ── Layout strategy:
+   Mobile/tablet: content-col uses display:contents so header+main
+   center themselves via max-width + margin:auto.
+   Desktop 1024px+: content-col becomes a real flex column, offset
+   right of the fixed sidebar; header+main fill it fully (no auto margin). ── */
+
+.content-col { display: contents; }
+
+.app-header { max-width: var(--max-width); margin: 0 auto; width: 100%; box-sizing: border-box; }
+.app-main   { max-width: var(--max-width); margin: 0 auto; width: 100%; box-sizing: border-box; }
 .bottom-nav { max-width: var(--max-width); margin: 0 auto; }
 
 /* ── HEADER ── */

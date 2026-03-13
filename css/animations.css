@@ -1,0 +1,607 @@
+/* ══════════════════════════════════════════
+   ANIMATIONS v2 — physics springs, blur-in,
+   glow, shimmer, stagger, count-up
+   ══════════════════════════════════════════ */
+
+/* ═══════════════════════════════════
+   1. SPRING TIMING TOKENS
+═══════════════════════════════════ */
+:root {
+  --spring-pop:   cubic-bezier(0.34, 1.56, 0.64, 1);
+  --spring-soft:  cubic-bezier(0.22, 1.00, 0.36, 1);
+  --spring-enter: cubic-bezier(0.16, 1.00, 0.30, 1);
+  --spring-exit:  cubic-bezier(0.55, 0.00, 1.00, 0.45);
+}
+
+/* ═══════════════════════════════════
+   2. KEYFRAMES
+═══════════════════════════════════ */
+
+@keyframes blurUp {
+  from { opacity: 0; transform: translateY(20px); filter: blur(6px); }
+  to   { opacity: 1; transform: translateY(0);    filter: blur(0);   }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes springIn {
+  0%   { opacity: 0; transform: scale(0.84); }
+  60%  { opacity: 1; transform: scale(1.03); }
+  80%  {             transform: scale(0.98); }
+  100% {             transform: scale(1);    }
+}
+
+@keyframes ripple {
+  to { transform: scale(4.5); opacity: 0; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-5px); }
+}
+
+@keyframes slotOut {
+  from { transform: translateY(0);     opacity: 1; }
+  to   { transform: translateY(-100%); opacity: 0; }
+}
+@keyframes slotIn {
+  from { transform: translateY(100%);  opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+
+@keyframes ringBreathe {
+  0%, 100% { transform: rotate(-90deg) scale(1); }
+  50%       { transform: rotate(-90deg) scale(1.012); }
+}
+
+@keyframes ringGlow {
+  0%   { filter: drop-shadow(0 0 0px rgba(26,115,232,0)); }
+  50%  { filter: drop-shadow(0 0 10px rgba(26,115,232,0.65)); }
+  100% { filter: drop-shadow(0 0 0px rgba(26,115,232,0)); }
+}
+
+@keyframes calRipple {
+  from { transform: scale(1);   opacity: 0.6; }
+  to   { transform: scale(2.2); opacity: 0;   }
+}
+
+@keyframes springPop {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.18); }
+  65%  { transform: scale(0.94); }
+  82%  { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+@keyframes progressGrow {
+  from { width: 0%; }
+}
+
+@keyframes progressShimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+@keyframes dangerPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(217,48,37,0); }
+  50%  { box-shadow: 0 0 10px 3px rgba(217,48,37,0.22); }
+  100% { box-shadow: 0 0 0 0 rgba(217,48,37,0); }
+}
+
+@keyframes toastBounce {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(20px) scale(0.88); }
+  55%  { opacity: 1; transform: translateX(-50%) translateY(-5px)  scale(1.03); }
+  75%  {             transform: translateX(-50%) translateY(2px)   scale(0.99); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0)     scale(1);   }
+}
+
+@keyframes toastExit {
+  from { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateX(-50%) translateY(12px) scale(0.92); }
+}
+
+@keyframes btnShine {
+  from { left: -100%; opacity: 0.6; }
+  to   { left: 160%;  opacity: 0; }
+}
+
+@keyframes pillSlideIn {
+  from { transform: scaleX(0.3) scaleY(0.6); opacity: 0; }
+  to   { transform: scaleX(1) scaleY(1);     opacity: 1; }
+}
+
+@keyframes sheetItemIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes countUp {
+  from { transform: translateY(8px); opacity: 0; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+/* ═══════════════════════════════════
+   3. SCREEN ENTER — blur-up stagger
+═══════════════════════════════════ */
+.screen.active { animation: none; }
+
+.screen-stack > * {
+  animation: blurUp 0.5s var(--spring-enter) both;
+}
+.screen-stack > *:nth-child(1) { animation-delay: 0.00s; }
+.screen-stack > *:nth-child(2) { animation-delay: 0.04s; }
+.screen-stack > *:nth-child(3) { animation-delay: 0.08s; }
+.screen-stack > *:nth-child(4) { animation-delay: 0.12s; }
+.screen-stack > *:nth-child(5) { animation-delay: 0.15s; }
+.screen-stack > *:nth-child(6) { animation-delay: 0.18s; }
+
+/* ═══════════════════════════════════
+   4. TILE HOVER
+═══════════════════════════════════ */
+.tile {
+  transition:
+    box-shadow 0.28s var(--spring-soft),
+    transform  0.28s var(--spring-soft);
+  will-change: transform;
+}
+.tile:hover {
+  box-shadow: 0 8px 24px rgba(60,64,67,0.14), 0 3px 8px rgba(60,64,67,0.10);
+  transform: translateY(-3px);
+}
+.tile:active { transform: translateY(0) scale(0.985); transition-duration: 0.1s; }
+
+body.dark-mode .tile:hover {
+  box-shadow: 0 10px 32px rgba(0,0,0,0.55), 0 3px 10px rgba(0,0,0,0.4);
+}
+
+/* ═══════════════════════════════════
+   5. BUTTON RIPPLE + SHINE
+═══════════════════════════════════ */
+.main-add-btn, .add-tile, .md-btn--filled,
+.sheet-log-btn, .hist-save-btn, .login-btn,
+.login-tab, .an-pill {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple-wave {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.32);
+  pointer-events: none;
+  transform: scale(0);
+  animation: ripple 0.6s var(--spring-soft);
+}
+
+.md-btn--filled::after, .sheet-log-btn::after,
+.hist-save-btn::after, .login-btn::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0; width: 50%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+  left: -100%;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.md-btn--filled:active::after,
+.sheet-log-btn:active::after,
+.hist-save-btn:active::after,
+.login-btn:active::after {
+  animation: btnShine 0.45s var(--spring-soft);
+}
+
+/* ═══════════════════════════════════
+   6. HERO TILE
+═══════════════════════════════════ */
+.home-hero { animation: springIn 0.55s var(--spring-enter) both; }
+.hero-motivation { animation: fadeIn 0.4s 0.25s var(--spring-soft) both; }
+
+.water-ring svg {
+  animation: ringBreathe 3.5s ease-in-out infinite;
+  animation-delay: 0.8s;
+}
+
+.ring-fill.goal-reached {
+  animation: ringGlow 1.2s var(--spring-soft) 2;
+}
+
+/* Ring color shifts with hydration pct */
+.ring-fill[data-pct="low"]  { stroke: var(--water-low);  }
+.ring-fill[data-pct="mid"]  { stroke: var(--water-mid);  }
+.ring-fill[data-pct="good"] { stroke: var(--water-good); }
+.ring-fill[data-pct="full"] { stroke: var(--water-full); }
+
+.ring-fill {
+  transition:
+    stroke-dashoffset 0.7s var(--spring-soft),
+    stroke            0.5s var(--spring-soft);
+}
+
+body.dark-mode .ring-fill[data-pct="full"] {
+  filter: drop-shadow(0 0 8px rgba(100,181,246,0.55));
+}
+
+/* ═══════════════════════════════════
+   7. HERO AMOUNT — slot machine
+═══════════════════════════════════ */
+.hero-amount-wrap {
+  overflow: hidden;
+  position: relative;
+  display: inline-block;
+}
+
+#heroAmount.slot-exit  { animation: slotOut 0.18s var(--spring-exit) forwards; }
+#heroAmount.slot-enter { animation: slotIn  0.25s var(--spring-soft) forwards; }
+
+/* ═══════════════════════════════════
+   8. QUICK-ADD TILES — press-in effect
+═══════════════════════════════════ */
+.add-tile {
+  transition:
+    transform  0.22s var(--spring-soft),
+    box-shadow 0.22s var(--spring-soft),
+    background 0.18s;
+  box-shadow: var(--shadow-1);
+}
+.add-tile:hover {
+  transform: translateY(-4px) scale(1.04);
+  box-shadow: 0 8px 20px rgba(26,115,232,0.2), 0 2px 6px rgba(26,115,232,0.1);
+}
+.add-tile:active {
+  transform: scale(0.91) translateY(2px);
+  box-shadow: inset 0 2px 6px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.06);
+  background: var(--md-primary-light);
+  transition-duration: 0.08s;
+}
+.add-tile:hover .add-tile-icon  { animation: float 1.6s var(--spring-soft) infinite; display: inline-block; }
+.add-tile:active .add-tile-icon { animation: none; transform: scale(0.85); transition: transform 0.08s; }
+
+/* ═══════════════════════════════════
+   9. MAIN ADD BUTTON
+═══════════════════════════════════ */
+.main-add-btn {
+  transition: transform 0.28s var(--spring-soft), box-shadow 0.28s var(--spring-soft);
+}
+.main-add-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 28px rgba(26,115,232,0.22), 0 3px 8px rgba(26,115,232,0.12);
+}
+.main-add-btn:active { transform: scale(0.974) translateY(0); transition-duration: 0.1s; }
+
+.main-add-icon { transition: transform 0.28s var(--spring-pop); }
+.main-add-btn:hover .main-add-icon  { transform: scale(1.14) rotate(-10deg); }
+.main-add-btn:active .main-add-icon { transform: scale(0.88); transition-duration: 0.1s; }
+
+/* ═══════════════════════════════════
+   10. OTHER DRINK BUTTON
+═══════════════════════════════════ */
+.other-drink-btn {
+  transition:
+    background   0.2s var(--spring-soft),
+    transform    0.2s var(--spring-soft),
+    border-color 0.2s, color 0.2s, box-shadow 0.2s;
+}
+.other-drink-btn:hover {
+  transform: translateX(5px);
+  border-color: var(--md-primary);
+  color: var(--md-primary);
+  box-shadow: -3px 0 0 0 var(--md-primary);
+}
+.other-drink-btn:active { transform: translateX(2px) scale(0.98); transition-duration: 0.08s; }
+
+/* ═══════════════════════════════════
+   11. NAV ITEMS — spring pill morph
+═══════════════════════════════════ */
+.nav-item { transition: background 0.25s var(--spring-soft); }
+
+.nav-icon {
+  transition:
+    background 0.3s var(--spring-soft),
+    transform  0.3s var(--spring-pop),
+    color 0.2s;
+}
+.nav-item:hover:not(.active) .nav-icon { transform: translateY(-3px); }
+.nav-item:active .nav-icon { transform: scale(0.86); transition-duration: 0.1s; }
+.nav-item.active .nav-icon {
+  background: var(--md-primary-light);
+  color: var(--md-primary-dark);
+  animation: pillSlideIn 0.35s var(--spring-pop) both;
+}
+
+.nav-item.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 24px; height: 3px;
+  background: var(--md-primary);
+  border-radius: 2px 2px 0 0;
+  animation: pillSlideIn 0.3s var(--spring-pop) both;
+}
+
+/* ═══════════════════════════════════
+   12. DRINK SHEET — backdrop blur + stagger
+═══════════════════════════════════ */
+.sheet-overlay {
+  animation: fadeIn 0.2s var(--spring-soft) both;
+  transition: backdrop-filter 0.35s var(--spring-soft);
+}
+.sheet-overlay.open { backdrop-filter: blur(3px); }
+
+.drink-sheet { transition: transform 0.38s var(--spring-soft); }
+
+.drink-sheet.open .sheet-title      { animation: sheetItemIn 0.30s 0.05s var(--spring-enter) both; }
+.drink-sheet.open .drink-grid       { animation: sheetItemIn 0.32s 0.10s var(--spring-enter) both; }
+.drink-sheet.open .sheet-amount-row { animation: sheetItemIn 0.32s 0.15s var(--spring-enter) both; }
+.drink-sheet.open .sheet-equiv      { animation: sheetItemIn 0.28s 0.18s var(--spring-enter) both; }
+.drink-sheet.open .sheet-log-btn    { animation: sheetItemIn 0.30s 0.20s var(--spring-enter) both; }
+
+/* ═══════════════════════════════════
+   13. DRINK TILES
+═══════════════════════════════════ */
+.drink-tile {
+  transition:
+    transform    0.22s var(--spring-soft),
+    border-color 0.18s,
+    background   0.18s,
+    box-shadow   0.22s;
+}
+.drink-tile:hover {
+  transform: translateY(-3px) scale(1.04);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.06);
+}
+.drink-tile:active { transform: scale(0.91); transition-duration: 0.08s; }
+.drink-tile.selected { animation: springPop 0.4s var(--spring-pop); }
+.drink-tile:hover .drink-tile-emoji { animation: float 1.2s var(--spring-soft) infinite; display: inline-block; }
+
+/* ═══════════════════════════════════
+   14. ANALYTICS PILLS + STAT CARDS
+═══════════════════════════════════ */
+.an-pill {
+  transition:
+    background 0.22s var(--spring-soft), color 0.18s, border-color 0.18s,
+    transform  0.22s var(--spring-pop),  box-shadow 0.22s;
+}
+.an-pill:hover:not(.active) {
+  border-color: var(--md-primary);
+  color: var(--md-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(26,115,232,0.15);
+}
+.an-pill:active { transform: scale(0.94); transition-duration: 0.08s; }
+.an-pill.active { box-shadow: 0 4px 14px rgba(26,115,232,0.35); animation: springPop 0.35s var(--spring-pop); }
+
+.an-stat-card {
+  animation: blurUp 0.4s var(--spring-enter) both;
+  transition: transform 0.25s var(--spring-soft), box-shadow 0.25s;
+}
+.an-stats-grid > *:nth-child(1) { animation-delay: 0.06s; }
+.an-stats-grid > *:nth-child(2) { animation-delay: 0.11s; }
+.an-stats-grid > *:nth-child(3) { animation-delay: 0.16s; }
+.an-stats-grid > *:nth-child(4) { animation-delay: 0.21s; }
+.an-stat-card:hover {
+  transform: translateY(-4px) scale(1.025);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.07);
+}
+
+/* ═══════════════════════════════════
+   15. PROGRESS BARS — grow + shimmer sweep
+═══════════════════════════════════ */
+.progress-fill {
+  animation: progressGrow 0.75s 0.1s var(--spring-soft) both;
+  position: relative;
+  overflow: hidden;
+}
+.progress-fill::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.45) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: progressShimmer 0.8s 0.9s var(--spring-soft) 1;
+}
+
+.an-goal-bar-fill {
+  animation: progressGrow 0.9s 0.35s var(--spring-soft) both;
+  position: relative;
+  overflow: hidden;
+}
+.an-goal-bar-fill::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.5) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: progressShimmer 0.8s 1.3s var(--spring-soft) 1;
+}
+
+/* ═══════════════════════════════════
+   16. CALENDAR
+═══════════════════════════════════ */
+.cal-day {
+  transition: background 0.18s var(--spring-soft), transform 0.2s var(--spring-pop), color 0.15s;
+  position: relative;
+}
+.cal-day:hover:not(.other) {
+  transform: scale(1.15);
+  background: var(--md-primary-light);
+  color: var(--md-primary);
+}
+.cal-day:active { transform: scale(0.88); transition-duration: 0.08s; }
+.cal-day.selected { animation: springPop 0.4s var(--spring-pop); }
+
+.cal-day.selected::before {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  background: transparent;
+  border: 2px solid var(--md-primary);
+  animation: calRipple 0.45s var(--spring-soft) forwards;
+}
+
+.cal-days:has(.selected) .cal-day:not(.selected):not(.other) {
+  opacity: 0.62;
+  transition: opacity 0.2s;
+}
+
+.cal-nav-btn {
+  transition: background 0.2s var(--spring-soft), transform 0.2s var(--spring-pop), color 0.18s;
+}
+.cal-nav-btn:hover { background: var(--md-primary-light); color: var(--md-primary); transform: scale(1.12); }
+.cal-nav-btn:active { transform: scale(0.88); transition-duration: 0.08s; }
+
+/* ═══════════════════════════════════
+   17. HISTORY EDIT BUTTONS
+═══════════════════════════════════ */
+.hist-edit-btn {
+  transition: transform 0.18s var(--spring-pop), background 0.15s, box-shadow 0.18s;
+}
+.hist-edit-btn:hover  { transform: scale(1.1); box-shadow: 0 3px 10px rgba(0,0,0,0.12); }
+.hist-edit-btn:active { transform: scale(0.86); transition-duration: 0.08s; }
+
+.hist-save-btn {
+  transition: transform 0.25s var(--spring-soft), box-shadow 0.25s, background 0.18s;
+  position: relative; overflow: hidden;
+}
+.hist-save-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(26,115,232,0.32), 0 3px 8px rgba(26,115,232,0.18);
+}
+.hist-save-btn:active { transform: scale(0.97) translateY(0); transition-duration: 0.1s; }
+
+/* ═══════════════════════════════════
+   18. STAT CHIPS
+═══════════════════════════════════ */
+.stat-chip {
+  transition: transform 0.22s var(--spring-soft), box-shadow 0.22s;
+}
+.stat-chip:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 4px 14px rgba(26,115,232,0.14), 0 0 0 1.5px var(--md-primary-light);
+}
+.stat-value.count-up { animation: countUp 0.3s var(--spring-soft) both; }
+
+/* ═══════════════════════════════════
+   19. DANGER BUTTONS
+═══════════════════════════════════ */
+.danger-btn {
+  transition: transform 0.22s var(--spring-soft), background 0.18s, border-color 0.18s, box-shadow 0.22s;
+}
+.danger-btn:hover {
+  transform: translateX(5px);
+  box-shadow: 3px 0 0 0 #EF9A9A inset;
+  animation: dangerPulse 1.2s var(--spring-soft) infinite;
+}
+.danger-btn--hard:hover {
+  transform: translateX(5px);
+  box-shadow: 3px 0 0 0 rgba(255,255,255,0.25) inset;
+  animation: dangerPulse 1.2s var(--spring-soft) infinite;
+}
+.danger-btn:active { transform: translateX(2px) scale(0.98); transition-duration: 0.08s; }
+
+/* ═══════════════════════════════════
+   20. DRINK ROWS (settings)
+═══════════════════════════════════ */
+.drink-row {
+  transition: transform 0.22s var(--spring-soft), box-shadow 0.22s, background 0.18s;
+}
+.drink-row:hover {
+  transform: translateX(5px);
+  box-shadow: -3px 0 0 0 var(--md-primary);
+  background: var(--md-surface-2);
+}
+body.dark-mode .drink-row:hover { background: #33383F; }
+
+.drink-row-edit { transition: transform 0.2s var(--spring-pop), box-shadow 0.18s; }
+.drink-row-edit:hover { transform: scale(1.08); box-shadow: 0 3px 10px rgba(26,115,232,0.28); }
+
+.drink-row-del { transition: transform 0.2s var(--spring-pop), background 0.15s; }
+.drink-row-del:hover  { transform: scale(1.15) rotate(10deg); background: var(--md-error-light); }
+.drink-row-del:active { transform: scale(0.88) rotate(0deg); transition-duration: 0.08s; }
+
+/* ═══════════════════════════════════
+   21. LOGIN
+═══════════════════════════════════ */
+.login-card { animation: springIn 0.5s var(--spring-enter) both; }
+
+.login-btn {
+  transition: transform 0.22s var(--spring-soft), box-shadow 0.22s, background 0.18s;
+  position: relative; overflow: hidden;
+}
+.login-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(26,115,232,0.38), 0 3px 8px rgba(26,115,232,0.2);
+}
+.login-btn:active { transform: scale(0.97) translateY(0); transition-duration: 0.1s; }
+
+.google-btn { transition: transform 0.22s var(--spring-soft), box-shadow 0.22s, border-color 0.18s; }
+.google-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.07);
+  border-color: #1A73E8;
+}
+.google-btn:active { transform: scale(0.97) translateY(0); transition-duration: 0.1s; }
+
+.login-tab { transition: background 0.2s var(--spring-soft), color 0.18s, transform 0.18s var(--spring-pop); }
+.login-tab:hover:not(.active) { background: rgba(26,115,232,0.07); color: var(--md-primary); transform: scale(1.02); }
+.login-tab.active { animation: springPop 0.3s var(--spring-pop); }
+
+/* ═══════════════════════════════════
+   22. TOAST
+═══════════════════════════════════ */
+.toast.visible { animation: toastBounce 0.5s var(--spring-soft) both; }
+.toast.hiding  { animation: toastExit  0.25s var(--spring-exit) forwards; }
+
+/* ═══════════════════════════════════
+   23. REMINDER TILE
+═══════════════════════════════════ */
+.reminder-status-tile { transition: background 0.4s var(--spring-soft), box-shadow 0.4s; }
+.reminder-status-tile.on { box-shadow: 0 4px 16px rgba(19,115,51,0.18); }
+
+/* ═══════════════════════════════════
+   24. DARK MODE — richer shadow/glow values
+═══════════════════════════════════ */
+body.dark-mode .add-tile:hover {
+  box-shadow: 0 10px 28px rgba(100,181,246,0.22), 0 3px 8px rgba(100,181,246,0.12);
+}
+body.dark-mode .main-add-btn:hover {
+  box-shadow: 0 12px 32px rgba(100,181,246,0.25), 0 4px 10px rgba(0,0,0,0.4);
+}
+body.dark-mode .an-pill.active { box-shadow: 0 4px 16px rgba(100,181,246,0.4); }
+body.dark-mode .login-btn:hover {
+  box-shadow: 0 10px 28px rgba(100,181,246,0.35), 0 3px 10px rgba(0,0,0,0.4);
+}
+body.dark-mode .tile:hover {
+  box-shadow: 0 12px 36px rgba(0,0,0,0.6), 0 4px 12px rgba(0,0,0,0.45);
+}
+body.dark-mode .hist-save-btn:hover {
+  box-shadow: 0 10px 24px rgba(100,181,246,0.35), 0 3px 8px rgba(0,0,0,0.4);
+}
+
+/* ═══════════════════════════════════
+   25. SHIMMER SKELETON
+═══════════════════════════════════ */
+.skeleton {
+  background: linear-gradient(90deg, var(--md-surface-2) 25%, var(--md-surface-3) 50%, var(--md-surface-2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+  border-radius: var(--radius-md);
+}
+
+/* ═══════════════════════════════════
+   26. REDUCE MOTION
+═══════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+  }
+}

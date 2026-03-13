@@ -117,8 +117,6 @@ const AnalyticsScreen = (() => {
     const tile  = Utils.el('anChartTile');
     const data  = getViewData();
     const goal  = Storage.getGoal();
-    const max   = Math.max(...data.map(d => d.total), goal);
-
     if (data.every(d => d.total === 0)) {
       tile.innerHTML = `
         <div class="an-chart-title">${currentView === 'weekly' ? 'Last 7 Days' : 'Last 30 Days'}</div>
@@ -127,6 +125,7 @@ const AnalyticsScreen = (() => {
       return;
     }
 
+    const max   = Math.max(...data.map(d => d.total), goal, 1); // guard against 0/NaN
     const W        = 320;
     const H        = 160;
     const padL     = 36;
@@ -275,20 +274,20 @@ const AnalyticsScreen = (() => {
     const goal  = Storage.getGoal();
     const today = formatDateKey(new Date());
     let streak  = 0;
-    let d       = new Date();
+    // Start from today, walk backwards day by day
+    // If today has no data yet, start from yesterday (day still in progress)
+    const todayEntry = chartData.find(e => e.date === today);
+    const d = new Date();
+    if (!todayEntry || todayEntry.total < goal) {
+      // skip today, start from yesterday
+      d.setDate(d.getDate() - 1);
+    }
     while (true) {
       const ds    = formatDateKey(d);
       const found = chartData.find(e => e.date === ds);
       if (found && found.total >= goal) {
         streak++;
         d.setDate(d.getDate() - 1);
-      } else if (ds === today) {
-        // today not yet complete — check yesterday onwards
-        d.setDate(d.getDate() - 1);
-        const yest = formatDateKey(d);
-        const y    = chartData.find(e => e.date === yest);
-        if (y && y.total >= goal) { streak++; d.setDate(d.getDate() - 1); }
-        else break;
       } else {
         break;
       }

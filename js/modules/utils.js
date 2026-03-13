@@ -67,8 +67,12 @@ const Utils = (() => {
     const t = el('toast');
     clearTimeout(toastTimer);
     t.textContent = msg;
+    t.classList.remove('hiding');
     t.classList.add('visible');
-    toastTimer = setTimeout(() => t.classList.remove('visible'), 2500);
+    toastTimer = setTimeout(() => {
+      t.classList.add('hiding');
+      t.addEventListener('animationend', () => t.classList.remove('visible', 'hiding'), { once: true });
+    }, 2500);
   };
 
   const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
@@ -84,3 +88,38 @@ const Utils = (() => {
 Utils.escapeHtml = (str) => String(str)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;')
   .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/* ══════════════════════════════════════════
+   RIPPLE — attaches to any .ripple-host element
+   ══════════════════════════════════════════ */
+Utils.initRipples = () => {
+  document.addEventListener('pointerdown', (e) => {
+    const btn = e.target.closest(
+      '.main-add-btn, .add-tile, .md-btn--filled, .sheet-log-btn, .hist-save-btn, .login-btn, .login-tab, .an-pill'
+    );
+    if (!btn) return;
+
+    const rect   = btn.getBoundingClientRect();
+    const size   = Math.max(rect.width, rect.height) * 2;
+    const x      = e.clientX - rect.left - size / 2;
+    const y      = e.clientY - rect.top  - size / 2;
+
+    const wave = document.createElement('span');
+    wave.className = 'ripple-wave';
+    wave.style.cssText = `
+      width:${size}px; height:${size}px;
+      left:${x}px; top:${y}px;
+    `;
+    btn.appendChild(wave);
+    wave.addEventListener('animationend', () => wave.remove());
+  }, { passive: true });
+};
+
+/* ── Number flip animation on heroAmount ── */
+Utils.animateNumber = (el) => {
+  if (!el) return;
+  el.classList.remove('animating');
+  void el.offsetWidth; // reflow to restart
+  el.classList.add('animating');
+  el.addEventListener('animationend', () => el.classList.remove('animating'), { once: true });
+};

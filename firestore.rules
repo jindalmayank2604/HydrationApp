@@ -1,0 +1,102 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─────────────────────────────────────────────────────────
+    // HELPERS
+    // ─────────────────────────────────────────────────────────
+
+    // Signed in at all
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    // Owns the uid bucket being accessed
+    function isOwner(uid) {
+      return isAuthed() && request.auth.uid == uid;
+    }
+
+    // One of the two admin Google accounts
+    function isAdmin() {
+      return isAuthed() && request.auth.token.email in [
+        'jindalmayank2604@gmail.com',
+        'mayankjindal2604@gmail.com'
+      ];
+    }
+
+    // Water entry field validation
+    // amount: number, 1–9999 ml  |  date: "YYYY-MM-DD" string  |  ts: server timestamp
+    function validWaterEntry(data) {
+      return data.keys().hasAll(['amount', 'date', 'ts'])
+          && data.keys().hasOnly(['amount', 'date', 'ts'])
+          && data.amount is number
+          && data.amount >= 1
+          && data.amount <= 9999
+          && data.date   is string
+          && data.date.size() == 10
+          && data.ts     == request.time;   // must be server timestamp — no client spoofing
+    }
+
+    // Shared drinks doc validation
+    // Must have exactly a 'drinks' list — no extra fields
+    function validSharedDrinks(data) {
+      return data.keys().hasOnly(['drinks'])
+          && data.drinks is list;
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // ROLES COLLECTION
+    // Read:  any authenticated user (needed for role lookup on login)
+    // Write: DENIED from client — manage only via Firebase Console
+    // List:  blocked — nobody can enumerate all role documents
+    // ─────────────────────────────────────────────────────────
+    match /Roles/{email} {
+      allow get:    if isAuthed();
+      allow list:   if false;
+      allow create,
+            update,
+            delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // USER DATA
+    // Read + Write: owner only (uid must match the auth token)
+    // Writes validated: correct fields, sane amount range,
+    //   date format, and server-side timestamp
+    // ─────────────────────────────────────────────────────────
+    match /users/{uid}/water_entries/{entryId} {
+      allow read:   if isOwner(uid);
+      allow create: if isOwner(uid) && validWaterEntry(request.resource.data);
+      allow update: if isOwner(uid) && validWaterEntry(request.resource.data);
+      allow delete: if isOwner(uid);
+    }
+
+    // Block any other paths under /users (e.g. users/{uid}/config)
+    match /users/{uid}/{other=**} {
+      allow read, write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // SHARED DRINK TYPES
+    // Read:  any authenticated user
+    // Write: admin emails only, with field validation
+    // ─────────────────────────────────────────────────────────
+    match /app/shared {
+      allow read:   if isAuthed();
+      allow write:  if isAdmin() && validSharedDrinks(request.resource.data);
+    }
+
+    // Block all other /app/* documents (app/config, app/users, etc.)
+    match /app/{other} {
+      allow read, write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // CATCH-ALL — deny everything not explicitly allowed above
+    // ─────────────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+  }
+}
