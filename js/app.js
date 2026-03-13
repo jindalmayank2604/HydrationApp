@@ -45,6 +45,7 @@ const App = (() => {
     Router.init();
     HomeScreen.init();
     HistoryScreen.init();
+    AnalyticsScreen.init();
     ReminderScreen.init();
     SettingsScreen.init();
 

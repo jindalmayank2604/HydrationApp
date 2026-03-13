@@ -397,3 +397,140 @@
 .remember-label input[type="checkbox"] {
   width: 16px; height: 16px; accent-color: #1A73E8; cursor: pointer;
 }
+
+/* ══════════════════════════════════════════
+   SCREEN: Analytics
+   ══════════════════════════════════════════ */
+
+/* Toggle pills */
+.an-toggle-row {
+  display: flex;
+  gap: 10px;
+  padding: 4px 0 8px;
+}
+.an-pill {
+  flex: 1;
+  padding: 10px 0;
+  border-radius: var(--radius-pill);
+  border: 2px solid var(--md-outline);
+  background: var(--md-surface);
+  color: var(--md-on-surface-med);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all var(--dur-short) var(--ease-standard);
+}
+.an-pill.active {
+  background: var(--md-primary);
+  border-color: var(--md-primary);
+  color: #fff;
+}
+
+/* Chart tile */
+.an-chart-tile {
+  padding: 16px;
+}
+.an-chart-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--md-on-surface);
+  margin-bottom: 12px;
+}
+.an-chart-wrap {
+  width: 100%;
+  overflow: hidden;
+}
+.an-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--md-on-surface-med);
+}
+.an-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-left: 6px;
+}
+.an-legend-dot:first-child { margin-left: 0; }
+
+/* Stats tile */
+.an-stats-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--md-on-surface);
+  margin-bottom: 14px;
+}
+.an-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.an-stat-card {
+  border-radius: var(--radius-md);
+  padding: 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.an-stat-best   { background: #FFF8E1; }
+.an-stat-low    { background: #FCE8E6; }
+.an-stat-avg    { background: #E8F0FE; }
+.an-stat-streak { background: #FBE9E7; }
+
+body.dark-mode .an-stat-best   { background: #332D00; }
+body.dark-mode .an-stat-low    { background: #3C1A18; }
+body.dark-mode .an-stat-avg    { background: #1A2845; }
+body.dark-mode .an-stat-streak { background: #3C1A10; }
+
+.an-stat-icon { font-size: 18px; }
+.an-stat-val  { font-size: 18px; font-weight: 700; color: var(--md-on-surface); line-height: 1.1; }
+.an-stat-key  { font-size: 11px; font-weight: 600; color: var(--md-on-surface-med); }
+.an-stat-sub  { font-size: 10px; color: var(--md-on-surface-low); margin-top: 2px; }
+
+/* Goal bar */
+.an-goal-hit { margin-top: 4px; }
+.an-goal-hit-label {
+  font-size: 12px;
+  color: var(--md-on-surface-med);
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+.an-goal-bar-track {
+  height: 8px;
+  background: var(--md-surface-3);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+.an-goal-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #34A853, #1A73E8);
+  border-radius: var(--radius-pill);
+  transition: width 0.6s var(--ease-decel);
+}
+
+/* Empty / loading states */
+.an-empty, .an-loading {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--md-on-surface-med);
+  font-size: 14px;
+}
+
+/* Dark mode chart text */
+body.dark-mode .an-pill {
+  background: #2A2D35;
+  border-color: #3D4148;
+  color: #8A8F9A;
+}
+body.dark-mode .an-pill.active {
+  background: var(--md-primary);
+  border-color: var(--md-primary);
+  color: #fff;
+}
