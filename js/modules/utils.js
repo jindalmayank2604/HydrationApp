@@ -147,7 +147,8 @@ Utils.getMaggieTag = (email) => {
 Utils.isPrivileged = () => {
   const session  = Auth.getSession();
   const role     = (session?.role || '').toLowerCase().trim();
-  const isMaggie = (session?.email || '').toLowerCase().trim() === 'sampadagupta070@gmail.com';
+  const _em = (session?.email || '').toLowerCase().trim();
+  const isMaggie = _em.startsWith('sampadagupta') && _em.endsWith('@gmail.com');
   if (isMaggie) return true;
   return ['pro', 'admin', 'maggie'].includes(role);
 };
@@ -155,7 +156,8 @@ Utils.isPrivileged = () => {
 Utils.getRole = () => {
   const session  = Auth.getSession();
   const role     = (session?.role || 'user').toLowerCase().trim(); // .trim() — Firestore may have trailing space
-  const isMaggie = (session?.email || '').toLowerCase().trim() === 'sampadagupta070@gmail.com';
+  const _em2 = (session?.email || '').toLowerCase().trim();
+  const isMaggie = _em2.startsWith('sampadagupta') && _em2.endsWith('@gmail.com');
   if (isMaggie) return 'pro';   // Maggie always gets pro access regardless of stored role
   return role;
 };

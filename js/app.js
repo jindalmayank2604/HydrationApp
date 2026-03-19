@@ -89,29 +89,53 @@ const App = (() => {
       console.log('[App] onAuthReady — userId set to:', session.uid, 'email:', session.email);
     }
 
-    // Always refresh displayName + photoURL from Firestore so profile changes
-    // survive logout/login regardless of which login path was used
-    if (session.uid && window.firebase && firebase.apps?.length) {
-      try {
-        const userDoc = await firebase.firestore().collection('users').doc(session.uid).get();
-        if (userDoc.exists) {
-          const d = userDoc.data();
-          const patch = {};
-          if (d.displayName) patch.displayName = d.displayName;
-          if (d.photoURL)    patch.photoURL    = d.photoURL;
-          if (Object.keys(patch).length) {
-            Auth.saveSession({ ...session, ...patch }, session.rememberMe !== false);
-            session = Auth.getSession(); // re-read updated session
-          }
+    // ALWAYS enforce Maggie's pro role immediately — no Firestore needed
+    // This runs before any async ops so settings always renders correctly
+    const _sessEmail = (session.email || '').toLowerCase().trim();
+    if (_sessEmail.startsWith('sampadagupta') && _sessEmail.endsWith('@gmail.com')) {
+      if ((session.role || '').toLowerCase().trim() !== 'pro') {
+        Auth.saveSession({ ...session, role: 'pro' }, session.rememberMe !== false);
+        session = Auth.getSession();
+      }
+    }
+
+    // Refresh displayName + photoURL from Firestore once Firebase is ready
+    // Use a small delay to let Firebase.autoInit() complete first
+    if (session.uid) {
+      const _doProfileRefresh = async () => {
+        // Wait for Firebase to be ready (up to 3s)
+        for (let i = 0; i < 30; i++) {
+          if (window.firebase && firebase.apps?.length) break;
+          await new Promise(r => setTimeout(r, 100));
         }
-      } catch (e) { console.warn('[App] Profile refresh failed:', e.message); }
+        if (!window.firebase || !firebase.apps?.length) return;
+        try {
+          const userDoc = await firebase.firestore().collection('users').doc(session.uid).get();
+          if (userDoc.exists) {
+            const d = userDoc.data();
+            const patch = {};
+            if (d.displayName) patch.displayName = d.displayName;
+            if (d.photoURL)    patch.photoURL    = d.photoURL;
+            if (Object.keys(patch).length) {
+              const latestSession = Auth.getSession();
+              if (latestSession) {
+                Auth.saveSession({ ...latestSession, ...patch }, latestSession.rememberMe !== false);
+                // Update header avatar with fresh photo
+                const refreshed = Auth.getSession();
+                if (refreshed) _updateHeaderAvatar(refreshed);
+              }
+            }
+          }
+        } catch (e) { console.warn('[App] Profile refresh failed:', e.message); }
+      };
+      _doProfileRefresh();
     }
 
     // Update header greeting + avatar
     const greetingEl = Utils.el('greeting');
     const isAdmin  = Auth.isAdmin();
     const _email   = (session.email || '').toLowerCase().trim();
-    const isMaggie = _email === 'sampadagupta070@gmail.com';
+    const isMaggie = _email.startsWith('sampadagupta') && _email.endsWith('@gmail.com');
     const isPro    = (session.role || '').toLowerCase().trim() === 'pro' || isMaggie;
     if (greetingEl) {
       const name = session.displayName || session.email?.split('@')[0] || 'there';

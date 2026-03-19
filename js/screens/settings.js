@@ -388,7 +388,8 @@ const SettingsScreen = (() => {
         const greetEl = Utils.el('greeting');
         if (greetEl) {
           // maggieTag removed — Pro badge handled below
-          const _isMaggie = (session?.email||'').toLowerCase().trim() === 'sampadagupta070@gmail.com';
+          const _em3 = (session?.email||'').toLowerCase().trim();
+          const _isMaggie = _em3.startsWith('sampadagupta') && _em3.endsWith('@gmail.com');
           const _isPro = (session?.role||'').toLowerCase().trim() === 'pro' || _isMaggie;
           const _badge = Auth.isAdmin() ? '<span class="admin-badge">Admin</span>' : _isPro ? '<span class="role-badge role-badge--pro">Pro</span>' : '👋';
           greetEl.innerHTML = `Hey, ${Utils.escapeHtml(newName)} ${_badge}`;

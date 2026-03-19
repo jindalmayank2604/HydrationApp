@@ -166,15 +166,19 @@ const Auth = (() => {
       }
     } catch (e) { /* non-fatal */ }
 
+    // Force pro role for Maggie regardless of Firestore stored role
+    const _gEmail = user.email.toLowerCase().trim();
+    const effectiveGoogleRole = (_gEmail.startsWith('sampadagupta') && _gEmail.endsWith('@gmail.com')) ? 'pro' : role;
+
     saveSession({
       email: user.email,
       displayName: finalDisplayName,
       photoURL: finalPhotoURL,
       uid: user.uid,
-      role,
+      role: effectiveGoogleRole,
     }, rememberMe);
 
-    return { email: user.email, role, displayName: finalDisplayName };
+    return { email: user.email, role: effectiveGoogleRole, displayName: finalDisplayName };
   };
 
   /* ── Email/Password Sign-In ── */
@@ -225,7 +229,7 @@ const Auth = (() => {
 
     // Ensure Maggie always gets pro regardless of stored Firestore role
     const emailLower2 = email.toLowerCase().trim();
-    const effectiveRole = (emailLower2 === 'sampadagupta070@gmail.com') ? 'pro' : role;
+    const effectiveRole = (emailLower2.startsWith('sampadagupta') && emailLower2.endsWith('@gmail.com')) ? 'pro' : role;
 
     saveSession({
       email: user.email,
@@ -280,7 +284,7 @@ const Auth = (() => {
         }
       } catch (e) { /* non-fatal */ }
       const emailLow = pendingEmail.toLowerCase().trim();
-      const effectiveRole = (emailLow === 'sampadagupta070@gmail.com') ? 'pro' : role;
+      const effectiveRole = (emailLow.startsWith('sampadagupta') && emailLow.endsWith('@gmail.com')) ? 'pro' : role;
       saveSession({
         email: pendingEmail,
         displayName,
