@@ -14,6 +14,12 @@ const Leaderboard = (() => {
   /* ── Get db reference ── */
   const db = () => firebase.firestore();
 
+  /* ── Goal bucket: round to nearest 500ml for fair grouping ──
+     500  → 500,  600-999 → 500 (rounded down to nearest 500)... 
+     Actually: round to nearest 500 so 2300 → 2500, 2600 → 2500 etc.
+     This groups users within ±250ml of each other. */
+  const goalBucket = (goal) => Math.round((goal || 2500) / 500) * 500;
+
   /* ── Compute honest streak from actual Firestore water_entries ──
      CHANGE-3: Fixed streak logic after goal changes.
      - Uses user's CURRENT goal (not cached stale values).
@@ -25,6 +31,7 @@ const Leaderboard = (() => {
        (current) goal — goal changes retroactively recalculate correctly.
      ───────────────────────────────────────────────────────────────── */
   const computeStreak = async (uid) => {
+    if (window.Firebase) await Firebase.waitUntilReady(6000);
     if (!window.firebase || !firebase.apps?.length) return { daily: 0, monthly: 0 };
     try {
       // CHANGE-3 fix: always read the CURRENT goal, not a stale cached value.
@@ -102,7 +109,9 @@ const Leaderboard = (() => {
 
   /* ── Push verified streak to leaderboard collection ── */
   const publishStreak = async (uid) => {
-    if (!uid || !window.firebase || !firebase.apps?.length) return;
+    if (!uid) return;
+    if (window.Firebase) await Firebase.waitUntilReady(6000);
+    if (!window.firebase || !firebase.apps?.length) return;
     try {
       const session = Auth.getSession();
       if (!session) return;
@@ -127,11 +136,12 @@ const Leaderboard = (() => {
         displayName,
         email: session.email,
         photoURL,
-        dailyStreak: daily,
-        monthlyStreak: monthly,
-        goal: goal,
-        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-        flagged: daily > 365 || monthly > 31,
+        dailyStreak:   Math.min(Math.floor(daily),   365),
+        monthlyStreak: Math.min(Math.floor(monthly), 31),
+        goal:          Math.max(500, Math.min(goal, 10000)),
+        goalBucket:    goalBucket(goal),
+        lastUpdated:   firebase.firestore.FieldValue.serverTimestamp(),
+        flagged:       false,
       }, { merge: true });
 
       console.log(`[Leaderboard] Published — daily:${daily} monthly:${monthly}`);
@@ -152,6 +162,7 @@ const Leaderboard = (() => {
     try {
       const field = type === 'daily' ? 'dailyStreak' : 'monthlyStreak';
       const snap  = await db().collection('leaderboard')
+        .where('flagged', '==', false)
         .orderBy(field, 'desc')
         .limit(limit)
         .get();
@@ -172,18 +183,68 @@ const Leaderboard = (() => {
      ─────────────────────────────────────────────────────────────── */
   let _unsubscribe = null;
   const subscribe = (type, callback) => {
-    if (_unsubscribe) _unsubscribe();
+    if (_unsubscribe) { _unsubscribe(); _unsubscribe = null; }
     const field = type === 'daily' ? 'dailyStreak' : 'monthlyStreak';
-    try {
-      _unsubscribe = db().collection('leaderboard')
-        .orderBy(field, 'desc')
-        .limit(50) // fetch more so client-side filter has enough to pick top 20
-        .onSnapshot(snap => {
-          const rows = snap.docs
-            .map((d, i) => ({ uid: d.id, ...d.data() }))
-            // drop genuinely abuse-flagged entries only
+
+    // Wait for Firebase to be ready before attaching listener
+    const _attach = async () => {
+      if (window.Firebase) {
+        const ready = await Firebase.waitUntilReady(6000);
+        if (!ready) { console.warn('[Leaderboard] Firebase not ready'); callback([]); return; }
+      }
+      try {
+        const userGoalBucket = goalBucket(LocalStorage.getGoal() || 2500);
+        _unsubscribe = db().collection('leaderboard')
+          .where('flagged', '==', false)
+          .where('goalBucket', '==', userGoalBucket)
+          .orderBy(field, 'desc')
+          .limit(50)
+          .onSnapshot(snap => {
+            const rows = snap.docs
+              .map((d, i) => ({ uid: d.id, ...d.data() }))
+              .filter(r => !r.flagged)
+              .sort((a, b) => {
+                const streakDiff = (b[field] || 0) - (a[field] || 0);
+                if (streakDiff !== 0) return streakDiff;
+                return (b.totalWater || 0) - (a.totalWater || 0);
+              })
+              .slice(0, 20)
+              .map((r, i) => ({ ...r, rank: i + 1 }));
+            callback(rows);
+          }, async err => {
+            console.warn('[Leaderboard] onSnapshot error:', err.message, err.code);
+            // Fallback: one-time fetch without flagged filter (works for old docs too)
+            try {
+              const snap2 = await db().collection('leaderboard')
+                .where('goalBucket', '==', userGoalBucket)
+                .orderBy(field, 'desc').limit(50).get();
+              const rows = snap2.docs
+                .map(d => ({ uid: d.id, ...d.data() }))
+                .filter(r => !r.flagged)
+                .sort((a, b) => {
+                  const streakDiff = (b[field] || 0) - (a[field] || 0);
+                  if (streakDiff !== 0) return streakDiff;
+                  return (b.totalWater || 0) - (a.totalWater || 0);
+                })
+                .slice(0, 20)
+                .map((r, i) => ({ ...r, rank: i + 1 }));
+              callback(rows);
+            } catch (e2) {
+              console.warn('[Leaderboard] fallback fetch failed:', e2.message);
+              callback([]);
+            }
+          });
+      } catch (e) {
+        console.warn('[Leaderboard] subscribe failed:', e.message);
+        // Fallback: one-time fetch without flagged filter
+        try {
+          const userGoalBucket2 = goalBucket(LocalStorage.getGoal() || 2500);
+          const snap2 = await db().collection('leaderboard')
+            .where('goalBucket', '==', userGoalBucket2)
+            .orderBy(field, 'desc').limit(50).get();
+          const rows = snap2.docs
+            .map(d => ({ uid: d.id, ...d.data() }))
             .filter(r => !r.flagged)
-            // secondary sort: higher total water as tie-breaker
             .sort((a, b) => {
               const streakDiff = (b[field] || 0) - (a[field] || 0);
               if (streakDiff !== 0) return streakDiff;
@@ -192,17 +253,54 @@ const Leaderboard = (() => {
             .slice(0, 20)
             .map((r, i) => ({ ...r, rank: i + 1 }));
           callback(rows);
-        }, err => {
-          console.warn('[Leaderboard] listener error:', err.message);
+        } catch (e2) {
+          console.warn('[Leaderboard] fallback also failed:', e2.message);
           callback([]);
-        });
-    } catch (e) {
-      console.warn('[Leaderboard] subscribe failed:', e.message);
-      callback([]);
-    }
+        }
+      }
+    };
+    _attach();
   };
 
   const unsubscribe = () => { if (_unsubscribe) { _unsubscribe(); _unsubscribe = null; } };
 
-  return { publishStreak, fetchTop, subscribe, unsubscribe, computeStreak };
+  /* ── Patch old leaderboard docs missing the flagged field ──
+     Runs once on admin/any login. Sets flagged:false on docs
+     that don't have it, so they show up in the indexed query. */
+  const patchMissingFlagged = async () => {
+    if (window.Firebase) await Firebase.waitUntilReady(6000);
+    if (!window.firebase || !firebase.apps?.length) return;
+    try {
+      const snap = await db().collection('leaderboard').limit(100).get();
+      const batch = db().batch();
+      let count = 0;
+      snap.docs.forEach(doc => {
+        const data = doc.data();
+        const needsPatch =
+          data.flagged === undefined || data.flagged === null ||
+          data.email   === undefined ||
+          typeof data.dailyStreak   !== 'number' ||
+          typeof data.monthlyStreak !== 'number';
+        if (needsPatch) {
+          batch.update(doc.ref, {
+            flagged:       false,
+            email:         data.email || '',
+            dailyStreak:   Math.min(Math.floor(data.dailyStreak   || 0), 365),
+            monthlyStreak: Math.min(Math.floor(data.monthlyStreak || 0), 31),
+            goal:          Math.max(500, Math.min(data.goal || 2500, 10000)),
+            goalBucket:    goalBucket(data.goal || 2500),
+          });
+          count++;
+        }
+      });
+      if (count > 0) {
+        await batch.commit();
+        console.log(`[Leaderboard] Patched ${count} old docs with flagged:false`);
+      }
+    } catch (e) {
+      console.warn('[Leaderboard] patchMissingFlagged failed:', e.message);
+    }
+  };
+
+  return { publishStreak, fetchTop, subscribe, unsubscribe, computeStreak, patchMissingFlagged };
 })();

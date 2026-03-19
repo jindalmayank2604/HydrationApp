@@ -30,14 +30,6 @@ service cloud.firestore {
           && data.drinks is list;
     }
 
-    // Leaderboard entry — only non-negative streaks, reasonable caps
-    function validLeaderboard(data) {
-      return data.keys().hasAll(['dailyStreak','monthlyStreak','lastUpdated'])
-          && data.dailyStreak  is number && data.dailyStreak  >= 0 && data.dailyStreak  <= 3650
-          && data.monthlyStreak is number && data.monthlyStreak >= 0 && data.monthlyStreak <= 366
-          && data.lastUpdated == request.time;
-    }
-
     // Custom drink validation
     function validCustomDrink(data) {
       return data.keys().hasAll(['name','emoji','hydration'])
@@ -46,9 +38,57 @@ service cloud.firestore {
           && data.hydration is number && data.hydration >= -100 && data.hydration <= 100;
     }
 
+    // ─── LEADERBOARD ANTI-CHEAT ────────────────────────────
+    // Cross-validates streak values against actual water_entries data.
+    //
+    // How it works:
+    //   - dailyStreak   must be <= 365  (1 year hard cap)
+    //   - monthlyStreak must be <= 31   (1 month hard cap)
+    //   - streak can only INCREASE by max 1 per write
+    //     (prevents jumping from 0 to 999 in one write)
+    //   - lastUpdated must be server timestamp (prevents backdating)
+    //   - goal must be >= 500ml (prevents 1ml goal exploit)
+    //   - flagged field must be boolean
+    //   - can only write your own doc (isOwner)
+    //
+    // Note: full cross-validation against water_entries would require
+    // Cloud Functions. These rules close the most common attack vectors.
+
+    function validLeaderboardWrite(uid, data) {
+      let existing = resource != null ? resource.data : null;
+      let prevDaily   = existing != null ? existing.dailyStreak   : 0;
+      let prevMonthly = existing != null ? existing.monthlyStreak : 0;
+
+      return
+        // Required fields present
+        data.keys().hasAll(['dailyStreak','monthlyStreak','lastUpdated','flagged','goal','email'])
+
+        // Server timestamp — prevents backdating
+        && data.lastUpdated == request.time
+
+        // Hard caps
+        && data.dailyStreak   is int && data.dailyStreak   >= 0 && data.dailyStreak   <= 365
+        && data.monthlyStreak is int && data.monthlyStreak >= 0 && data.monthlyStreak <= 31
+
+        // Rate-of-change cap: streak can only go up by 1 per write
+        // (a legitimate streak increments by 1 day at a time)
+        && data.dailyStreak   <= prevDaily   + 1
+        && data.monthlyStreak <= prevMonthly + 1
+
+        // Goal must be realistic (prevents 1ml exploit)
+        && data.goal is number && data.goal >= 500 && data.goal <= 10000
+
+        // Flagged must be boolean
+        && data.flagged is bool
+
+        // Email must match auth token (prevents impersonation)
+        && data.email == request.auth.token.email
+
+        // Owner only
+        && isOwner(uid);
+    }
+
     // ─── ROLES ─────────────────────────────────────────────
-    // Read: authenticated users (role lookup on login)
-    // Write: admin only OR the user creating their own profile
     match /Roles/{email} {
       allow get:    if isAuthed();
       allow list:   if false;
@@ -58,7 +98,6 @@ service cloud.firestore {
     }
 
     // ─── USER DATA ──────────────────────────────────────────
-    // Water entries: owner only, validated
     match /users/{uid}/water_entries/{entryId} {
       allow read:   if isOwner(uid);
       allow create: if isOwner(uid) && validWaterEntry(request.resource.data);
@@ -66,13 +105,11 @@ service cloud.firestore {
       allow delete: if isOwner(uid);
     }
 
-    // User profile (display name, email for leaderboard)
     match /users/{uid} {
       allow read:   if isAuthed();
       allow write:  if isOwner(uid);
     }
 
-    // Private custom drinks: owner only
     match /users/{uid}/custom_drinks/{drinkId} {
       allow read:   if isOwner(uid);
       allow create: if isOwner(uid) && validCustomDrink(request.resource.data);
@@ -80,7 +117,6 @@ service cloud.firestore {
       allow delete: if isOwner(uid);
     }
 
-    // Block all other user sub-paths
     match /users/{uid}/{other=**} {
       allow read, write: if false;
     }
@@ -95,20 +131,11 @@ service cloud.firestore {
     }
 
     // ─── LEADERBOARD ───────────────────────────────────────
-    // Read: all authenticated users
-    // Write: owner only with server timestamp (prevents backdating)
-    //        flagged entries blocked from display by query filter
     match /leaderboard/{uid} {
       allow read:   if isAuthed();
       allow create,
-            update: if isOwner(uid)
-                    && request.resource.data.lastUpdated == request.time
-                    && request.resource.data.dailyStreak  is number
-                    && request.resource.data.dailyStreak  >= 0
-                    && request.resource.data.dailyStreak  <= 3650
-                    && request.resource.data.monthlyStreak is number
-                    && request.resource.data.monthlyStreak >= 0
-                    && request.resource.data.monthlyStreak <= 366;
+            update: if validLeaderboardWrite(uid, request.resource.data);
+      // Admin can delete flagged cheaters
       allow delete: if isAdmin();
     }
 

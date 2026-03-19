@@ -446,11 +446,19 @@ const AnalyticsScreen = (() => {
     const tile = Utils.el('anLeaderboardTile');
     if (!tile) return;
 
-    const currentUid = Firebase.getUserId();
+    const currentUid  = Firebase.getUserId();
+    const userGoal     = LocalStorage.getGoal() || 2500;
+    const userBucket   = Math.round(userGoal / 500) * 500;
+    const tierLabel    = userBucket >= 1000 ? `${(userBucket/1000).toFixed(1)}L` : `${userBucket}ml`;
 
     tile.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-        <div style="font-size:15px;font-weight:700;color:var(--md-on-background);">🏆 Global Leaderboard</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <div>
+          <div style="font-size:15px;font-weight:700;color:var(--md-on-background);">🏆 Global Leaderboard</div>
+          <div style="font-size:11px;color:var(--md-on-surface-med);margin-top:2px;">
+            🎯 ${tierLabel} goal tier · Ranked against peers at your level
+          </div>
+        </div>
         <div style="display:flex;gap:6px;">
           <button class="lb-tab ${type==='daily'?'lb-active':''}" data-t="daily"
             style="padding:5px 12px;border-radius:99px;border:1.5px solid ${type==='daily'?'var(--md-primary)':'var(--md-outline)'};background:${type==='daily'?'var(--md-primary)':'transparent'};color:${type==='daily'?'#fff':'var(--md-on-surface-med)'};font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.2s;">Daily</button>
@@ -458,7 +466,7 @@ const AnalyticsScreen = (() => {
             style="padding:5px 12px;border-radius:99px;border:1.5px solid ${type==='monthly'?'var(--md-primary)':'var(--md-outline)'};background:${type==='monthly'?'var(--md-primary)':'transparent'};color:${type==='monthly'?'#fff':'var(--md-on-surface-med)'};font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.2s;">Monthly</button>
         </div>
       </div>
-      <div id="lbRows" style="display:flex;flex-direction:column;gap:8px;">
+      <div id="lbRows" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
         <div style="text-align:center;padding:16px;color:var(--md-on-surface-med);font-size:13px;">⏳ Loading…</div>
       </div>
       <div style="font-size:11px;color:var(--md-on-surface-low);margin-top:10px;text-align:center;">
@@ -471,12 +479,16 @@ const AnalyticsScreen = (() => {
       btn.addEventListener('click', () => renderLeaderboard(btn.dataset.t));
     });
 
-    // Real-time listener
-    if (window.Leaderboard) {
+    // Real-time listener — wait for Firebase to be ready, then load leaderboard
+    const _startLeaderboard = async () => {
+      // Use Firebase.waitUntilReady() which polls db + userId
+      if (window.Firebase) await Firebase.waitUntilReady(6000);
+
       // First publish current user's streak
       if (currentUid) Leaderboard.publishStreak(currentUid).catch(()=>{});
 
       _lbUnsub = Leaderboard.subscribe(type, (rows) => {
+        console.log('[Analytics] Leaderboard callback rows:', rows?.length, rows);
         const container = Utils.el('lbRows');
         if (!container) return;
         if (!rows || rows.length === 0) {
@@ -485,36 +497,31 @@ const AnalyticsScreen = (() => {
         }
         const field = type === 'daily' ? 'dailyStreak' : 'monthlyStreak';
         container.innerHTML = rows.map((r, i) => {
-          const isMe  = r.uid === currentUid;
-          const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`;
+          const isMe   = r.uid === currentUid;
+          const medal  = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`;
+          const isTop3 = i < 3;
           const streak = r[field] || 0;
+          const avatar = window.Profile
+            ? Profile.avatarHTML(r.photoURL||null, r.displayName||'?', 36)
+            : `<div style="width:36px;height:36px;border-radius:50%;background:var(--md-primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex-shrink:0;">${(r.displayName||'?').charAt(0).toUpperCase()}</div>`;
           return `
-            <div style="
-              display:flex;align-items:center;gap:10px;padding:10px 12px;
-              border-radius:12px;
-              background:${isMe ? 'var(--md-primary-light)' : 'var(--md-surface-2)'};
-              border:${isMe ? '1.5px solid var(--md-primary)' : '1.5px solid transparent'};
-              transition:all 0.2s;
-            ">
-              <div style="font-size:${i<3?'20px':'14px'};font-weight:700;min-width:28px;text-align:center;">${medal}</div>
-              ${window.Profile ? Profile.avatarHTML(r.photoURL||null, r.displayName||'?', 36) : '<div style="width:36px;height:36px;border-radius:50%;background:var(--md-primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex-shrink:0;">' + (r.displayName||'?').charAt(0).toUpperCase() + '</div>'}
-              <div style="flex:1;min-width:0;">
-                <div style="font-size:13px;font-weight:600;color:var(--md-on-background);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                  ${Utils.escapeHtml(r.displayName||'Anonymous')}${isMe?' (you)':''}${Utils.getMaggieTag ? Utils.getMaggieTag(r.email||'') : ''}
-                </div>
-                <div style="font-size:11px;color:var(--md-on-surface-med);">${type==='daily'?'daily streak':'days hit this month'}</div>
+            <div class="lb-row${isMe ? ' lb-row--me' : ''}">
+              <div class="lb-medal${isTop3 ? '' : ' lb-medal--num'}">${medal}</div>
+              ${avatar}
+              <div class="lb-info">
+                <div class="lb-name">${Utils.escapeHtml(r.displayName||'Anonymous')}${isMe ? ' <span style="opacity:0.6;font-size:11px;">(you)</span>' : ''}</div>
+                <div class="lb-sub">${type==='daily' ? 'daily streak' : 'days this month'}</div>
               </div>
-              <div style="text-align:right;">
-                <div style="font-size:18px;font-weight:700;color:${streak>0?'var(--md-primary)':'var(--md-on-surface-low)'};">${streak}</div>
-                <div style="font-size:10px;color:var(--md-on-surface-med);">🔥</div>
+              <div class="lb-streak">
+                <div class="lb-streak-num${streak===0?' lb-streak-num--zero':''}">${streak}</div>
+                <div class="lb-streak-icon">🔥</div>
               </div>
             </div>
           `;
         }).join('');
       });
-    } else {
-      Utils.el('lbRows').innerHTML = '<div style="text-align:center;padding:16px;color:var(--md-on-surface-med);font-size:13px;">Leaderboard not available</div>';
-    }
+    };
+    _startLeaderboard();
   };
 
   return { init };

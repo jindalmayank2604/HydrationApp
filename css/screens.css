@@ -877,3 +877,56 @@ body.dark-mode .an-tt-label { color: #8A8F9A; }
 
 /* Hover cursor on bar groups */
 .an-bar-group { outline: none; }
+
+/* ══════════════════════════════════════════
+   LEADERBOARD rows
+   ══════════════════════════════════════════ */
+.lb-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--md-surface-2);
+  border: 1.5px solid transparent;
+  transition: all 0.2s;
+}
+.lb-row--me {
+  background: rgba(26,115,232,0.12);
+  border-color: var(--md-primary);
+}
+.lb-row:active { transform: scale(0.98); }
+.lb-medal {
+  font-size: 20px;
+  font-weight: 700;
+  min-width: 28px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.lb-medal--num {
+  font-size: 13px;
+}
+.lb-info { flex: 1; min-width: 0; }
+.lb-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--md-on-background);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lb-sub {
+  font-size: 11px;
+  color: var(--md-on-surface-med);
+}
+.lb-streak {
+  text-align: right;
+  flex-shrink: 0;
+}
+.lb-streak-num {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--md-primary);
+}
+.lb-streak-num--zero { color: var(--md-on-surface-low); }
+.lb-streak-icon { font-size: 10px; color: var(--md-on-surface-med); }

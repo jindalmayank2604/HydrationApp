@@ -173,7 +173,11 @@ const App = (() => {
 
     // Publish verified streak to leaderboard
     if (window.Leaderboard && session.uid) {
-      setTimeout(() => Leaderboard.publishStreak(session.uid).catch(()=>{}), 3000);
+      setTimeout(() => {
+        Leaderboard.publishStreak(session.uid).catch(()=>{});
+        // Patch any old leaderboard docs missing the flagged field
+        if (Leaderboard.patchMissingFlagged) Leaderboard.patchMissingFlagged().catch(()=>{});
+      }, 3000);
     }
 
     // Update weather in header after login (geolocation may now be permitted)
