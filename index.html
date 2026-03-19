@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Water Tracker</title>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="alternate icon" href="assets/icon-192.png">
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#1A73E8" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Water Tracker" />
+  <link rel="apple-touch-icon" href="assets/icon-192.png" />
+
+
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Google+Sans+Display:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/screens.css" />
+  <link rel="stylesheet" href="css/login.css" />
+  <link rel="stylesheet" href="css/dark.css" />
+  <link rel="stylesheet" href="css/responsive.css" />
+  <link rel="stylesheet" href="css/animations.css" />
+</head>
+<body>
+  <!-- ── BOTTOM NAV ── -->
+  <nav class="bottom-nav" role="navigation">
+    <button class="nav-item active" data-screen="home">
+      <div class="nav-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+      </div>
+      <span class="nav-label">Home</span>
+    </button>
+    <button class="nav-item" data-screen="history">
+      <div class="nav-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
+      </div>
+      <span class="nav-label">History</span>
+    </button>
+    <button class="nav-item" data-screen="analytics">
+      <div class="nav-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg>
+      </div>
+      <span class="nav-label">Analytics</span>
+    </button>
+    <button class="nav-item" data-screen="reminder">
+      <div class="nav-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+      </div>
+      <span class="nav-label">Reminder</span>
+    </button>
+    <button class="nav-item" data-screen="settings">
+      <div class="nav-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </div>
+      <span class="nav-label">Settings</span>
+    </button>
+  </nav>
+
+  <div class="content-col">
+
+  <!-- ── HEADER ── -->
+  <header class="app-header" id="appHeader">
+    <div class="header-left">
+      <div id="headerAvatar" class="header-avatar" style="overflow:hidden;border-radius:50%;">💧</div>
+      <div class="header-text">
+        <div class="header-greeting" id="greeting">Water Tracker</div>
+        <div class="header-date" id="headerDate"></div>
+      </div>
+    </div>
+    <div class="header-right">
+      <button id="darkModeToggle" aria-label="Toggle dark mode"
+        style="background:none;border:none;cursor:pointer;font-size:22px;padding:6px;border-radius:50%;transition:background 150ms;"
+        title="Toggle dark/light mode">🌙</button>
+    </div>
+  </header>
+
+  <!-- ── MAIN CONTENT ── -->
+  <main class="app-main">
+    <section class="screen active" id="screen-home">
+      <div id="home-root"></div>
+    </section>
+    <section class="screen" id="screen-history">
+      <div id="history-root"></div>
+    </section>
+
+    <!-- ANALYTICS SCREEN -->
+    <section class="screen" id="screen-analytics">
+      <div id="analytics-root"></div>
+    </section>
+    <section class="screen" id="screen-reminder">
+      <div id="reminder-root"></div>
+    </section>
+    <section class="screen" id="screen-settings">
+      <div id="settings-root"></div>
+    </section>
+  </main>
+
+  </div><!-- /.content-col -->
+
+
+  <!-- ── TOAST ── -->
+  <div class="toast" id="toast" role="alert" aria-live="polite"></div>
+
+  <!-- Show login overlay IMMEDIATELY — skip if rememberMe session valid -->
+  <script>
+    (function() {
+      // Check if valid rememberMe session exists
+      const hasRememberMe = (() => {
+        try {
+          const s = JSON.parse(localStorage.getItem('wt_session_v1'));
+          if (!s || !s.rememberMe) return false;
+          if (Date.now() - s.savedAt > 30 * 24 * 60 * 60 * 1000) return false;
+          return true;
+        } catch { return false; }
+      })();
+
+      // Survey not done yet → let survey.js show first, no spinner needed
+      const surveyDone = localStorage.getItem('wt_survey_done') === 'true';
+
+      if (!hasRememberMe && surveyDone) {
+        // Returning user who did survey — show login spinner while JS loads
+        const overlay = document.createElement('div');
+        overlay.id = 'loginOverlay';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,#E8F0FE,#D2E3FC 50%,#C5E1F5);display:flex;align-items:center;justify-content:center;padding:16px;';
+        overlay.innerHTML = '<div style="background:#fff;border-radius:28px;padding:32px 24px;width:100%;max-width:380px;box-shadow:0 8px 40px rgba(26,115,232,.18);text-align:center;"><div style="font-size:52px;">💧</div><div style="font-family:Google Sans,sans-serif;font-size:22px;font-weight:700;color:#202124;margin:8px 0 4px;">Water Tracker</div><div style="font-size:13px;color:#5F6368;margin-bottom:20px;">Signing you in...</div><div style="width:40px;height:40px;border:4px solid #D2E3FC;border-top-color:#1A73E8;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto;"></div></div>';
+        document.body.appendChild(overlay);
+      }
+      // If surveyDone is false → no spinner, survey.js will show its own overlay
+    })();
+  </script>
+
+  <!-- ── SCRIPTS (order matters) ── -->
+  <!-- hCaptcha (loaded before app) -->
+  <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+
+  <!-- ZXing barcode scanner (free, no API, works in browser) -->
+  <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
+
+  <!-- Firebase SDKs (loaded before app scripts) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="js/modules/firebase.js?v=10"></script>
+  <script src="js/modules/storage.js?v=10"></script>
+  <script src="js/modules/notifications.js?v=10"></script>
+  <script src="js/modules/utils.js?v=10"></script>
+  <script src="js/modules/router.js?v=10"></script>
+  <script src="js/modules/auth.js?v=10"></script>
+  <script src="js/screens/login.js?v=10"></script>
+  <script src="js/modules/signup.js?v=10"></script>
+  <script src="js/modules/weather.js?v=10"></script>
+  <script src="js/modules/profile.js?v=10"></script>
+  <script src="js/modules/leaderboard.js?v=10"></script>
+  <script src="js/screens/survey.js?v=10"></script>
+  <script src="js/screens/aiscan.js?v=10"></script>
+  <script src="js/modules/drinks.js?v=10"></script>
+  <script src="js/screens/home.js?v=10"></script>
+  <script src="js/screens/history.js?v=10"></script>
+  <script src="js/screens/analytics.js?v=10"></script>
+  <script src="js/screens/reminder.js?v=10"></script>
+  <script src="js/modules/tokenManager.js?v=10"></script>
+  <script src="js/modules/dataExport.js?v=10"></script>
+  <script src="js/modules/weatherGoal.js?v=10"></script>
+  <script src="js/screens/settings.js?v=10"></script>
+  <script src="js/app.js?v=10"></script>
+
+  <!-- Dark Mode Script -->
+  <script>
+    (function() {
+      // Apply saved dark mode immediately to avoid flash
+      const savedDark = localStorage.getItem('wt_dark_mode');
+      // APP-2 fix: fall back to system preference on first visit
+      const prefersDark = savedDark === null
+        ? window.matchMedia('(prefers-color-scheme: dark)').matches
+        : savedDark === 'true';
+      if (prefersDark) document.body.classList.add('dark-mode');
+    })();
+  </script>
+
+  <!-- Service Worker -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      });
+    }
+  </script>
+
+  <!-- Install banner -->
+  <div id="installBanner" style="display:none;position:fixed;bottom:80px;left:16px;right:16px;background:#fff;border-radius:20px;padding:16px 20px;box-shadow:0 4px 24px rgba(0,0,0,0.15);z-index:300;align-items:center;gap:12px;">
+    <img src="assets/icon-192.png" width="40" height="40" style="border-radius:10px;" />
+    <div style="flex:1;">
+      <div style="font-weight:700;font-size:14px;font-family:'Google Sans',sans-serif;">Install Water Tracker</div>
+      <div style="font-size:12px;color:#5F6368;margin-top:2px;">Add to home screen for quick access</div>
+    </div>
+    <button id="installBtn" style="background:#1A73E8;color:#fff;border:none;border-radius:99px;padding:8px 16px;font-weight:700;font-size:13px;cursor:pointer;">Install</button>
+    <button id="dismissBanner" style="background:none;border:none;font-size:20px;cursor:pointer;color:#5F6368;padding:0 4px;">✕</button>
+  </div>
+  <script>
+    let deferredPrompt;
+    const banner = document.getElementById('installBanner');
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault(); deferredPrompt = e; banner.style.display = 'flex';
+    });
+    document.getElementById('installBtn')?.addEventListener('click', async () => {
+      banner.style.display = 'none';
+      if (deferredPrompt) { deferredPrompt.prompt(); deferredPrompt = null; }
+    });
+    document.getElementById('dismissBanner')?.addEventListener('click', () => {
+      banner.style.display = 'none';
+    });
+  </script>
+</body>
+</html>

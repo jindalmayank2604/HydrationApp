@@ -1,0 +1,216 @@
+/* ══════════════════════════════════════════
+   LOGIN — Overlay, card, form elements
+   ══════════════════════════════════════════ */
+
+#loginOverlay {
+  position: fixed; inset: 0; z-index: 500;
+  background: linear-gradient(135deg, #1A237E 0%, #1565C0 50%, #0D47A1 100%);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+
+.login-card {
+  background: #fff;
+  border-radius: 24px;
+  padding: 28px 24px 24px;
+  width: 100%; max-width: 400px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.25);
+  position: relative;
+}
+
+.login-logo {
+  text-align: center;
+  font-size: 40px;
+  margin-bottom: 8px;
+}
+
+.login-title {
+  text-align: center;
+  font-size: 22px; font-weight: 700;
+  color: #202124;
+  font-family: var(--font-display);
+  margin-bottom: 4px;
+}
+
+.login-sub {
+  text-align: center;
+  font-size: 13px; color: #5F6368;
+  margin-bottom: 20px; line-height: 1.5;
+}
+
+/* Tabs */
+.login-tabs {
+  display: flex;
+  background: #F1F3F4;
+  border-radius: 12px;
+  padding: 4px; gap: 4px;
+  margin-bottom: 20px;
+}
+
+.login-tab {
+  flex: 1; padding: 8px;
+  border: none; border-radius: 9px;
+  background: transparent;
+  font-size: 14px; font-weight: 600;
+  color: #5F6368; cursor: pointer;
+  font-family: var(--font-body);
+  transition: all 150ms;
+}
+.login-tab.active {
+  background: #fff;
+  color: #1A73E8;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
+
+/* Form fields */
+.login-field-group { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+
+.login-label {
+  display: block;
+  font-size: 12px; font-weight: 600;
+  color: #5F6368; margin-bottom: 5px;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+
+.login-input-wrap { position: relative; }
+
+.login-input {
+  width: 100%; padding: 13px 16px;
+  border: 1.5px solid #DADCE0;
+  border-radius: 12px;
+  font-size: 15px; font-family: var(--font-body);
+  color: #202124; background: #fff;
+  outline: none; box-sizing: border-box;
+  transition: border-color 150ms;
+}
+.login-input:focus { border-color: #1A73E8; }
+
+.pw-toggle-btn {
+  position: absolute; right: 12px; top: 50%;
+  transform: translateY(-50%);
+  background: none; border: none; cursor: pointer;
+  padding: 4px; color: #5F6368; font-size: 18px;
+}
+
+/* Messages */
+.login-error {
+  background: #FFF0F0; border: 1px solid #FFCDD2;
+  color: #D93025; border-radius: 8px;
+  padding: 10px 12px; font-size: 13px; margin-bottom: 12px;
+}
+.login-info {
+  background: #E8F5E9; border: 1px solid #A5D6A7;
+  color: #2E7D32; border-radius: 8px;
+  padding: 10px 12px; font-size: 13px; margin-bottom: 12px;
+}
+
+/* Main CTA */
+.login-btn {
+  width: 100%; padding: 13px;
+  background: #1A73E8; color: #fff;
+  border: none; border-radius: 12px;
+  font-size: 15px; font-weight: 700;
+  font-family: var(--font-body);
+  cursor: pointer; margin-bottom: 12px;
+  transition: all 150ms;
+}
+.login-btn:hover  { background: #1557B0; }
+.login-btn:active { transform: scale(0.97); }
+
+/* Google button */
+.google-btn {
+  width: 100%; padding: 12px;
+  background: #fff; color: #202124;
+  border: 1.5px solid #DADCE0;
+  border-radius: 12px;
+  font-size: 14px; font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer; margin-bottom: 8px;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  transition: all 150ms;
+}
+.google-btn:hover  { background: #F8F9FA; border-color: #1A73E8; }
+.google-btn:active { transform: scale(0.97); }
+
+/* Divider */
+.login-divider {
+  display: flex; align-items: center; gap: 10px;
+  margin: 12px 0; color: #9AA0A6; font-size: 12px;
+}
+.login-divider::before,
+.login-divider::after {
+  content: ''; flex: 1;
+  height: 1px; background: #DADCE0;
+}
+
+/* Forgot / back */
+.login-forgot {
+  background: none; border: none;
+  color: #1A73E8; font-size: 13px;
+  cursor: pointer; padding: 0;
+  width: 100%; text-align: center;
+  font-family: var(--font-body);
+}
+.login-back {
+  background: none; border: none;
+  color: #1A73E8; font-size: 13px;
+  cursor: pointer; padding: 0;
+  margin-bottom: 16px; display: block;
+  font-family: var(--font-body);
+}
+.login-section-title { font-size: 18px; font-weight: 700; color: #202124; margin-bottom: 6px; }
+.login-section-sub   { font-size: 13px; color: #5F6368; margin-bottom: 16px; }
+
+/* Badges */
+.admin-badge {
+  display: inline-block;
+  background: #FFF3E0; color: #E37400;
+  border: 1px solid #FFB74D;
+  border-radius: 6px; font-size: 11px;
+  font-weight: 700; padding: 2px 8px;
+  margin-left: 6px; vertical-align: middle;
+}
+.role-badge {
+  display: inline-block; border-radius: 6px;
+  font-size: 11px; font-weight: 700; padding: 2px 8px;
+}
+.role-badge--admin { background: #FFF3E0; color: #E37400; border: 1px solid #FFB74D; }
+.role-badge--pro   { background: rgba(251,188,4,0.1); color: #b45309; border: 1.5px solid rgba(251,188,4,0.7); font-weight: 700; letter-spacing: 0.3px; }
+.role-badge--user  { background: #E8F0FE; color: #1A73E8; border: 1px solid #A8C7FA; }
+
+/* Settings account tile */
+.settings-account-tile { padding: 20px; }
+.settings-account-row  { display: flex; align-items: center; gap: 14px; }
+.settings-account-avatar {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: var(--md-primary-light);
+  color: var(--md-primary);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; font-weight: 700; flex-shrink: 0;
+}
+.settings-account-info { flex: 1; min-width: 0; }
+.settings-account-name  { font-size: 16px; font-weight: 700; color: var(--md-on-background); }
+.settings-account-email { font-size: 12px; color: var(--md-on-surface-med); margin-top: 2px; word-break: break-all; }
+
+/* Locked banner */
+.locked-banner {
+  background: var(--md-surface-2);
+  border: 1.5px solid var(--md-outline);
+}
+.locked-title { font-size: 15px; font-weight: 700; color: var(--md-on-background); margin-bottom: 4px; }
+.locked-sub   { font-size: 13px; color: var(--md-on-surface-med); line-height: 1.5; }
+
+/* role-badge--maggie kept for backward compat but uses Pro style */
+.role-badge--maggie {
+  background: rgba(251,188,4,0.1);
+  color: #b45309;
+  border: 1.5px solid rgba(251,188,4,0.7);
+  margin-left: 6px;
+  vertical-align: middle;
+  font-weight: 700;
+}
+body.dark-mode .role-badge--maggie {
+  background: rgba(251,188,4,0.12);
+  color: #FBBC04;
+  border-color: rgba(251,188,4,0.5);
+}

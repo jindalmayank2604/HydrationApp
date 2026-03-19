@@ -1,0 +1,316 @@
+/* ══════════════════════════════════════════
+   RESPONSIVE
+   Phone:   < 600px  (default — mobile first)
+   Tablet:  600px – 1023px
+   Desktop: ≥ 1024px  (sidebar nav)
+   XL:      ≥ 1440px
+   ══════════════════════════════════════════ */
+
+/* ═══════════════════════════════════
+   TABLET  600px+
+═══════════════════════════════════ */
+@media (min-width: 600px) {
+  :root {
+    --max-width:     760px;
+    --header-height: 72px;
+  }
+
+  .app-header { padding: 14px 32px; }
+  .header-greeting { font-size: 18px; }
+
+  .bottom-nav {
+    max-width: 760px;
+    left: 50%; right: auto;
+    transform: translateX(-50%);
+    border-radius: 20px 20px 0 0;
+  }
+  .nav-icon  { width: 72px; height: 36px; }
+  .nav-label { font-size: 12px; }
+
+  .app-main { padding: 24px 32px 100px; }
+  .screen-stack { gap: 16px; }
+
+  .hero-amount { font-size: clamp(44px, 8vw, 64px); }
+
+  .add-tiles     { grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .add-tile      { padding: 16px 8px; border-radius: 20px; }
+  .add-tile-val  { font-size: 18px; }
+  .add-tile-icon { font-size: 24px; }
+
+  .stat-chip  { padding: 14px 16px; }
+  .stat-value { font-size: 22px; }
+  .tile { padding: 24px 28px; }
+
+  .an-stats-grid { grid-template-columns: repeat(4, 1fr); }
+  .cal-day       { font-size: 15px; }
+  .drink-grid    { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+}
+
+/* ═══════════════════════════════════
+   DESKTOP  1024px+
+   Sidebar fixed on left, content-col fills the rest.
+   CRITICAL RULES:
+     - .bottom-nav  → fixed sidebar, 256px wide, z-index 200
+     - .content-col → margin-left: 256px, flex column
+     - .app-header  → sticky inside content-col, full width of content-col,
+                       max-width NONE, margin 0 (kill the mobile centering)
+     - .app-main    → same reset, fills content-col
+═══════════════════════════════════ */
+@media (min-width: 1024px) {
+
+  :root {
+    --sidebar-width: 256px;
+    --nav-height:    0px;
+    --header-height: 64px;
+  }
+
+  body {
+    display: block;
+    padding-bottom: 0;
+  }
+
+  /* ── SIDEBAR ── */
+  .bottom-nav {
+    position: fixed !important;
+    top: 0 !important; left: 0 !important;
+    right: auto !important; bottom: 0 !important;
+    transform: none !important;
+    width: var(--sidebar-width) !important;
+    height: 100vh;
+    max-width: none;
+    margin: 0;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 2px;
+    padding: 20px 12px 24px;
+    border-top: none;
+    border-right: 1px solid var(--md-outline);
+    border-radius: 0;
+    background: var(--md-surface);
+    z-index: 200;
+    overflow-y: auto;
+    box-shadow: 2px 0 12px rgba(60,64,67,0.08);
+  }
+  body.dark-mode .bottom-nav {
+    background: #1E2128;
+    border-right-color: #33383F;
+    box-shadow: 2px 0 16px rgba(0,0,0,0.35);
+  }
+
+  .bottom-nav::before {
+    content: '💧 HydrationApp';
+    display: block;
+    font-size: 15px; font-weight: 700;
+    color: var(--md-primary);
+    padding: 4px 16px 18px;
+    font-family: var(--font-display);
+    letter-spacing: -0.3px;
+    border-bottom: 1px solid var(--md-outline);
+    margin-bottom: 10px;
+    flex-shrink: 0;
+  }
+  body.dark-mode .bottom-nav::before { border-bottom-color: #33383F; }
+
+  /* Nav items as sidebar rows */
+  .nav-item {
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: center;
+    padding: 11px 16px;
+    border-radius: 12px;
+    gap: 14px;
+    width: 100%; height: auto;
+    overflow: visible;
+  }
+  .nav-item.active             { background: var(--md-primary-light); }
+  .nav-item:hover:not(.active) { background: var(--md-surface-2); }
+  body.dark-mode .nav-item.active             { background: #1A2C4E; }
+  body.dark-mode .nav-item:hover:not(.active) { background: #282D36; }
+
+  .nav-item.active::after {
+    bottom: auto; top: 50%; left: 0;
+    transform: translateY(-50%);
+    width: 3px; height: 22px;
+    border-radius: 0 2px 2px 0;
+    animation: pillSlideIn 0.3s var(--spring-pop, cubic-bezier(0.34,1.56,0.64,1)) both;
+  }
+
+  .nav-icon {
+    width: 22px; height: 22px;
+    background: none !important;
+    flex-shrink: 0;
+    font-size: 18px;
+    animation: none !important;
+  }
+  .nav-item.active .nav-icon { color: var(--md-primary-dark); }
+  body.dark-mode .nav-item.active .nav-icon { color: #64B5F6; }
+
+  .nav-label {
+    font-size: 14px; font-weight: 600;
+    display: block;
+    color: var(--md-on-surface-med);
+  }
+  .nav-item.active .nav-label            { color: var(--md-primary-dark); font-weight: 700; }
+  body.dark-mode .nav-item.active .nav-label { color: #64B5F6; }
+
+  /* ── CONTENT COLUMN ──
+     Sits right of the sidebar.
+     All children fill this column — no mobile centering. */
+  .content-col {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    margin-left: var(--sidebar-width);
+    /* Prevent any overflow from creating a horizontal scrollbar */
+    overflow-x: hidden;
+  }
+
+  /* CRITICAL — kill mobile max-width centering on BOTH elements */
+  .app-header,
+  .app-main {
+    max-width: none !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-sizing: border-box;
+  }
+
+  /* Header: sticky at top of content-col */
+  .app-header {
+    position: sticky;
+    top: 0; z-index: 100;
+    padding: 0 40px;
+    height: var(--header-height);
+    /* Flex is already set in base.css — just override sizing */
+    box-shadow: 0 1px 0 var(--md-outline);
+  }
+  body.dark-mode .app-header { box-shadow: 0 1px 0 #33383F; }
+
+  /* Main fills the rest of content-col */
+  .app-main {
+    flex: 1;
+    padding: 32px 48px 64px;
+  }
+
+  /* Readable max-width for content inside main, left-aligned */
+  .screen-stack {
+    max-width: 900px;
+    margin-left: 0;
+    margin-right: auto;
+    gap: 20px;
+  }
+
+  /* Drink sheet: centered modal on desktop */
+  .sheet-overlay { align-items: center; }
+  .drink-sheet {
+    border-radius: 24px;
+    max-width: 500px;
+    transform: scale(0.92);
+    opacity: 0;
+    transition:
+      transform 0.28s var(--spring-soft, cubic-bezier(0.22,1,0.36,1)),
+      opacity   0.28s;
+  }
+  .drink-sheet.open { transform: scale(1); opacity: 1; }
+
+  /* Toast: top-right of content area */
+  .toast {
+    bottom: auto;
+    top: calc(var(--header-height) + 12px);
+    right: 32px;
+    left: auto;
+    transform: none;
+  }
+  .toast.visible {
+    transform: none;
+    animation: toastBounce 0.5s var(--spring-soft, cubic-bezier(0.22,1,0.36,1)) both;
+  }
+  .toast.hiding { animation: toastExit 0.25s forwards !important; }
+
+  /* Content size upgrades */
+  .home-hero   { min-height: 190px; }
+  .hero-amount { font-size: clamp(52px, 5vw, 72px); }
+
+  .add-tiles     { grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .add-tile      { padding: 20px 10px; border-radius: 24px; }
+  .add-tile-val  { font-size: 20px; }
+  .add-tile-icon { font-size: 28px; }
+
+  .an-stats-grid { grid-template-columns: 1fr 1fr; }
+  .tile          { padding: 28px 32px; }
+  .stat-value    { font-size: 24px; }
+  .stat-chip     { padding: 16px 20px; }
+
+  .login-card { max-width: 440px; padding: 36px 32px 32px; }
+}
+
+
+/* ═══════════════════════════════════
+   XL  1440px+
+═══════════════════════════════════ */
+@media (min-width: 1440px) {
+  :root { --sidebar-width: 280px; }
+
+  .content-col  { margin-left: var(--sidebar-width); }
+  .app-header,
+  .app-main     { max-width: none; margin-left: 0; margin-right: 0; }
+  .app-main     { padding: 36px 64px 64px; }
+  .screen-stack { max-width: 1040px; margin-left: 0; margin-right: auto; }
+}
+
+
+/* ═══════════════════════════════════
+   AI SCAN MODAL — Responsive
+   ═══════════════════════════════════ */
+
+/* Phone — bottom sheet (default) */
+#scanOverlay {
+  padding: 0 !important;
+  align-items: flex-end !important;
+  justify-content: center;
+}
+#scanSheet {
+  width: 100% !important;
+  max-width: 100% !important;
+  max-height: 92dvh;
+  overflow-y: auto;
+  border-radius: 24px 24px 0 0 !important;
+}
+/* Tiny phones */
+@media (max-width: 380px) {
+  #scanSheet { font-size: 13px; }
+  #scanSheet .vol-btn { padding: 5px 8px !important; font-size: 11px !important; }
+}
+/* Tablet 600px+ — centered floating card */
+@media (min-width: 600px) {
+  #scanOverlay {
+    align-items: center !important;
+    padding: 24px !important;
+  }
+  #scanSheet {
+    width: calc(100% - 48px) !important;
+    max-width: 520px !important;
+    border-radius: 28px !important;
+  }
+}
+/* Desktop 1024px+ — centered, account for sidebar */
+@media (min-width: 1024px) {
+  #scanOverlay {
+    padding-left: 260px !important; /* offset sidebar */
+    padding-right: 32px !important;
+    padding-top: 32px !important;
+    padding-bottom: 32px !important;
+    align-items: center !important;
+  }
+  #scanSheet {
+    max-width: 500px !important;
+    border-radius: 28px !important;
+  }
+}
+/* Scan tab text hidden on very small screens */
+@media (max-width: 400px) {
+  .scan-tab-btn span:last-child { display: none; }
+  .scan-tab-btn { padding: 10px !important; }
+}
+.vol-btn { flex-shrink: 0; }

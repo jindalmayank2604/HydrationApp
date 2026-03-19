@@ -1,0 +1,22 @@
+════════════════════════════════════════════════
+PASTE THESE RULES IN FIREBASE CONSOLE:
+Firebase Console → Firestore → Rules tab
+════════════════════════════════════════════════
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Roles — readable by anyone signed in
+    match /Roles/{email} {
+      allow read: if request.auth != null;
+    }
+
+    // Water data — open for now (fix auth later)
+    match /users/{userId}/{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
+
+════════════════════════════════════════════════

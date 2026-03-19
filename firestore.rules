@@ -1,0 +1,120 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── HELPERS ───────────────────────────────────────────
+    function isAuthed()    { return request.auth != null; }
+    function isOwner(uid)  { return isAuthed() && request.auth.uid == uid; }
+    function isAdmin()     {
+      return isAuthed() && request.auth.token.email in [
+        'jindalmayank2604@gmail.com',
+        'mayankjindal2604@gmail.com'
+      ];
+    }
+
+    // Water entry validation: amount 1-9999, date 10 chars, server timestamp, no extra fields
+    function validWaterEntry(data) {
+      return data.keys().hasAll(['amount','date','ts'])
+          && data.keys().hasOnly(['amount','date','ts'])
+          && data.amount is number
+          && data.amount >= 1
+          && data.amount <= 9999
+          && data.date is string
+          && data.date.size() == 10
+          && data.ts == request.time;
+    }
+
+    // Shared drinks doc
+    function validSharedDrinks(data) {
+      return data.keys().hasOnly(['drinks'])
+          && data.drinks is list;
+    }
+
+    // Leaderboard entry — only non-negative streaks, reasonable caps
+    function validLeaderboard(data) {
+      return data.keys().hasAll(['dailyStreak','monthlyStreak','lastUpdated'])
+          && data.dailyStreak  is number && data.dailyStreak  >= 0 && data.dailyStreak  <= 3650
+          && data.monthlyStreak is number && data.monthlyStreak >= 0 && data.monthlyStreak <= 366
+          && data.lastUpdated == request.time;
+    }
+
+    // Custom drink validation
+    function validCustomDrink(data) {
+      return data.keys().hasAll(['name','emoji','hydration'])
+          && data.name is string && data.name.size() > 0 && data.name.size() <= 30
+          && data.emoji is string
+          && data.hydration is number && data.hydration >= -100 && data.hydration <= 100;
+    }
+
+    // ─── ROLES ─────────────────────────────────────────────
+    // Read: authenticated users (role lookup on login)
+    // Write: admin only OR the user creating their own profile
+    match /Roles/{email} {
+      allow get:    if isAuthed();
+      allow list:   if false;
+      allow create: if isAuthed() && request.auth.token.email.lower() == email.lower();
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // ─── USER DATA ──────────────────────────────────────────
+    // Water entries: owner only, validated
+    match /users/{uid}/water_entries/{entryId} {
+      allow read:   if isOwner(uid);
+      allow create: if isOwner(uid) && validWaterEntry(request.resource.data);
+      allow update: if isOwner(uid) && validWaterEntry(request.resource.data);
+      allow delete: if isOwner(uid);
+    }
+
+    // User profile (display name, email for leaderboard)
+    match /users/{uid} {
+      allow read:   if isAuthed();
+      allow write:  if isOwner(uid);
+    }
+
+    // Private custom drinks: owner only
+    match /users/{uid}/custom_drinks/{drinkId} {
+      allow read:   if isOwner(uid);
+      allow create: if isOwner(uid) && validCustomDrink(request.resource.data);
+      allow update: if isOwner(uid) && validCustomDrink(request.resource.data);
+      allow delete: if isOwner(uid);
+    }
+
+    // Block all other user sub-paths
+    match /users/{uid}/{other=**} {
+      allow read, write: if false;
+    }
+
+    // ─── SHARED DRINKS ─────────────────────────────────────
+    match /app/shared {
+      allow read:  if isAuthed();
+      allow write: if isAdmin() && validSharedDrinks(request.resource.data);
+    }
+    match /app/{other} {
+      allow read, write: if false;
+    }
+
+    // ─── LEADERBOARD ───────────────────────────────────────
+    // Read: all authenticated users
+    // Write: owner only with server timestamp (prevents backdating)
+    //        flagged entries blocked from display by query filter
+    match /leaderboard/{uid} {
+      allow read:   if isAuthed();
+      allow create,
+            update: if isOwner(uid)
+                    && request.resource.data.lastUpdated == request.time
+                    && request.resource.data.dailyStreak  is number
+                    && request.resource.data.dailyStreak  >= 0
+                    && request.resource.data.dailyStreak  <= 3650
+                    && request.resource.data.monthlyStreak is number
+                    && request.resource.data.monthlyStreak >= 0
+                    && request.resource.data.monthlyStreak <= 366;
+      allow delete: if isAdmin();
+    }
+
+    // ─── CATCH-ALL ─────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

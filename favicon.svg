@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1A73E8"/>
+      <stop offset="100%" style="stop-color:#0D47A1"/>
+    </linearGradient>
+    <linearGradient id="drop" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#81D4FA"/>
+      <stop offset="100%" style="stop-color:#ffffff"/>
+    </linearGradient>
+  </defs>
+  <!-- Background circle -->
+  <circle cx="32" cy="32" r="32" fill="url(#bg)"/>
+  <!-- Water drop -->
+  <path d="M32 10 C32 10 18 26 18 36 C18 44.8 24.3 52 32 52 C39.7 52 46 44.8 46 36 C46 26 32 10 32 10Z"
+        fill="url(#drop)" opacity="0.95"/>
+  <!-- Inner shine -->
+  <ellipse cx="27" cy="30" rx="4" ry="6" fill="white" opacity="0.35" transform="rotate(-20 27 30)"/>
+</svg>
