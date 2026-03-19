@@ -145,17 +145,18 @@ Utils.getMaggieTag = (email) => {
    Add new privileged roles here — propagates everywhere automatically.
    ══════════════════════════════════════════════════════════════ */
 Utils.isPrivileged = () => {
-  const session  = Auth.getSession();
-  const role     = (session?.role || '').toLowerCase().trim();
-  const isMaggie = (session?.email || '').toLowerCase().trim() === 'sampadagupta070@gmail.com';
-  if (isMaggie) return true;
-  return ['pro', 'admin', 'maggie'].includes(role);
+  const session = Auth.getSession();
+  const role    = (session?.role || '').trim().toLowerCase();
+  /* Privileged by role OR by being Maggie (email-based) */
+  if (['pro', 'admin', 'maggie'].includes(role)) return true;
+  if (Utils.getMaggieTag && Utils.getMaggieTag(session?.email || '')) return true;
+  return false;
 };
 
 Utils.getRole = () => {
-  const session  = Auth.getSession();
-  const role     = (session?.role || 'user').toLowerCase().trim(); // .trim() — Firestore may have trailing space
-  const isMaggie = (session?.email || '').toLowerCase().trim() === 'sampadagupta070@gmail.com';
-  if (isMaggie) return 'pro';   // Maggie always gets pro access regardless of stored role
+  const session = Auth.getSession();
+  const role    = (session?.role || 'user').toLowerCase();
+  /* Treat Maggie as privileged even if Firestore role is still "user" */
+  if (role === 'user' && Utils.getMaggieTag && Utils.getMaggieTag(session?.email || '')) return 'maggie';
   return role;
 };
