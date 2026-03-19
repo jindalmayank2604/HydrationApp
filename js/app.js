@@ -26,9 +26,58 @@ const App = (() => {
     }
   };
 
-  /* ── Called after successful login ── */
+  /* ── Update header date + weather temperature ── */
+  const _updateHeaderDate = async () => {
+    const dateEl = Utils.el('headerDate');
+    if (!dateEl) return;
+    const dateStr = Utils.getHeaderDate();
+    // Always set plain date immediately
+    dateEl.textContent = dateStr;
+    // Then try to enrich with weather — geolocation first, IP fallback second
+    try {
+      let lat = null, lon = null;
+      // Try geolocation with short timeout
+      const geoResult = await new Promise((resolve) => {
+        if (!navigator.geolocation) { resolve(null); return; }
+        navigator.geolocation.getCurrentPosition(
+          pos => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+          ()   => resolve(null),
+          { timeout: 5000, maximumAge: 600_000 }
+        );
+      });
+      if (geoResult) {
+        lat = geoResult.lat; lon = geoResult.lon;
+      } else {
+        // IP-based fallback via ipapi.co (free, no key needed)
+        try {
+          const ctrl   = new AbortController();
+          setTimeout(() => ctrl.abort(), 5000);
+          const ipRes  = await window.fetch('https://ipapi.co/json/', { signal: ctrl.signal });
+          const ipData = await ipRes.json();
+          if (ipData.latitude && ipData.longitude) {
+            lat = ipData.latitude; lon = ipData.longitude;
+          }
+        } catch (e2) { /* IP lookup also failed */ }
+      }
+      if (lat === null) return; // no location available
+      // Fetch current weather from Open-Meteo
+      const ctrl2  = new AbortController();
+      setTimeout(() => ctrl2.abort(), 6000);
+      const url    = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&current=temperature_2m,weather_code&temperature_unit=celsius&timezone=auto`;
+      const res    = await window.fetch(url, { signal: ctrl2.signal });
+      const data   = await res.json();
+      const cur    = data.current;
+      if (cur && typeof cur.temperature_2m === 'number') {
+        const temp = Math.round(cur.temperature_2m);
+        const icon = window.Weather ? Weather.getIcon(cur.weather_code) : '🌡️';
+        dateEl.textContent = `${dateStr} · ${icon} ${temp}°C`;
+      }
+    } catch (e) {
+      console.warn('[App] Header weather failed:', e.message);
+    }
+  };
   const onAuthReady = async (authResult) => {
-    const session = Auth.getSession();
+    let session = Auth.getSession();
     if (!session) { LoginScreen.show(); return; }
 
     // Hide login overlay
@@ -38,6 +87,24 @@ const App = (() => {
     if (session.uid) {
       Firebase.setUserId(session.uid);
       console.log('[App] onAuthReady — userId set to:', session.uid, 'email:', session.email);
+    }
+
+    // Always refresh displayName + photoURL from Firestore so profile changes
+    // survive logout/login regardless of which login path was used
+    if (session.uid && window.firebase && firebase.apps?.length) {
+      try {
+        const userDoc = await firebase.firestore().collection('users').doc(session.uid).get();
+        if (userDoc.exists) {
+          const d = userDoc.data();
+          const patch = {};
+          if (d.displayName) patch.displayName = d.displayName;
+          if (d.photoURL)    patch.photoURL    = d.photoURL;
+          if (Object.keys(patch).length) {
+            Auth.saveSession({ ...session, ...patch }, session.rememberMe !== false);
+            session = Auth.getSession(); // re-read updated session
+          }
+        }
+      } catch (e) { console.warn('[App] Profile refresh failed:', e.message); }
     }
 
     // Update header greeting + avatar
@@ -85,6 +152,9 @@ const App = (() => {
       setTimeout(() => Leaderboard.publishStreak(session.uid).catch(()=>{}), 3000);
     }
 
+    // Update weather in header after login (geolocation may now be permitted)
+    _updateHeaderDate();
+
     // Weather-based smart goal popup (non-blocking, only before noon, once per day)
     if (window.WeatherGoal) WeatherGoal.tryShow().catch(() => {});
 
@@ -96,7 +166,7 @@ const App = (() => {
 
   /* ── Main init ── */
   const init = async () => {
-    Utils.el('headerDate').textContent = Utils.getHeaderDate();
+    _updateHeaderDate();
 
     // Init all screens
     Router.init();
@@ -196,11 +266,11 @@ const App = (() => {
     if (prefs.enabled) Notifier.start(prefs.interval).catch(() => {});
 
     setInterval(() => {
-      Utils.el('headerDate').textContent = Utils.getHeaderDate();
+      _updateHeaderDate();
     }, 60_000);
   };
 
-  return { init, onAuthReady, updateHeaderAvatar: _updateHeaderAvatar };
+  return { init, onAuthReady, updateHeaderAvatar: _updateHeaderAvatar, updateHeaderDate: _updateHeaderDate };
 })();
 
 document.addEventListener('DOMContentLoaded', () => {

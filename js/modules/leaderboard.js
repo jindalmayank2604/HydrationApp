@@ -111,13 +111,22 @@ const Leaderboard = (() => {
 
       // CHANGE-3: also persist totalWater for tie-breaking sort
       const goal = LocalStorage.getGoal() || 2500;
-      // Publish photoURL so leaderboard shows profile photos
-      const photoURL = session.photoURL || null;
+      // Prefer Firestore-saved profile data (captures changes made since last login)
+      let displayName = session.displayName || session.email?.split('@')[0] || 'Hydrator';
+      let photoURL    = session.photoURL || null;
+      try {
+        const userDoc = await db().collection('users').doc(uid).get();
+        if (userDoc.exists) {
+          const d = userDoc.data();
+          if (d.displayName) displayName = d.displayName;
+          if (d.photoURL)    photoURL    = d.photoURL;
+        }
+      } catch (e) { /* non-fatal, use session values */ }
 
       await db().collection('leaderboard').doc(uid).set({
-        displayName: session.displayName || session.email?.split('@')[0] || 'Hydrator',
+        displayName,
         email: session.email,
-        photoURL: photoURL,
+        photoURL,
         dailyStreak: daily,
         monthlyStreak: monthly,
         goal: goal,

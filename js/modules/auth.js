@@ -153,15 +153,28 @@ const Auth = (() => {
       }
     }
 
+    // Prefer Firestore-saved displayName/photoURL (user may have changed them)
+    let finalDisplayName = user.displayName;
+    let finalPhotoURL    = user.photoURL;
+    try {
+      const db      = firebase.firestore();
+      const userDoc = await db.collection('users').doc(user.uid).get();
+      if (userDoc.exists) {
+        const d = userDoc.data();
+        if (d.displayName) finalDisplayName = d.displayName;
+        if (d.photoURL)    finalPhotoURL    = d.photoURL;
+      }
+    } catch (e) { /* non-fatal */ }
+
     saveSession({
       email: user.email,
-      displayName: user.displayName,
-      photoURL: user.photoURL,
+      displayName: finalDisplayName,
+      photoURL: finalPhotoURL,
       uid: user.uid,
       role,
     }, rememberMe);
 
-    return { email: user.email, role, displayName: user.displayName };
+    return { email: user.email, role, displayName: finalDisplayName };
   };
 
   /* ── Email/Password Sign-In ── */
@@ -195,15 +208,34 @@ const Auth = (() => {
     }
 
     recordAttempt(true);
+
+    // Fetch saved displayName + photoURL from Firestore users doc
+    // so profile changes persist across logout/login
+    let displayName = user.displayName || email.split('@')[0];
+    let photoURL    = null;
+    try {
+      const db      = firebase.firestore();
+      const userDoc = await db.collection('users').doc(user.uid).get();
+      if (userDoc.exists) {
+        const d = userDoc.data();
+        if (d.displayName) displayName = d.displayName;
+        if (d.photoURL)    photoURL    = d.photoURL;
+      }
+    } catch (e) { console.warn('[Auth] Could not load profile from Firestore:', e.message); }
+
+    // Ensure Maggie always gets pro regardless of stored Firestore role
+    const emailLower2 = email.toLowerCase().trim();
+    const effectiveRole = (emailLower2 === 'sampadagupta070@gmail.com') ? 'pro' : role;
+
     saveSession({
       email: user.email,
-      displayName: user.displayName || email.split('@')[0],
-      photoURL: null,
+      displayName,
+      photoURL,
       uid: user.uid,
-      role,
+      role: effectiveRole,
     }, rememberMe);
 
-    return { email: user.email, role };
+    return { email: user.email, role: effectiveRole };
   };
 
   /* ── Sign Out ── */
@@ -235,12 +267,26 @@ const Auth = (() => {
     if (role) {
       // AUTH-3 fix: encode email into safe uid (no @ in Firestore doc IDs)
       const safeUid = 'otp_' + pendingEmail.replace(/[^a-zA-Z0-9]/g, '_');
+      // Try to restore saved displayName + photoURL from Firestore
+      let displayName = pendingEmail.split('@')[0];
+      let photoURL    = null;
+      try {
+        const db      = firebase.firestore();
+        const userDoc = await db.collection('users').doc(safeUid).get();
+        if (userDoc.exists) {
+          const d = userDoc.data();
+          if (d.displayName) displayName = d.displayName;
+          if (d.photoURL)    photoURL    = d.photoURL;
+        }
+      } catch (e) { /* non-fatal */ }
+      const emailLow = pendingEmail.toLowerCase().trim();
+      const effectiveRole = (emailLow === 'sampadagupta070@gmail.com') ? 'pro' : role;
       saveSession({
         email: pendingEmail,
-        displayName: pendingEmail.split('@')[0],
-        photoURL: null,
+        displayName,
+        photoURL,
         uid: safeUid,
-        role,
+        role: effectiveRole,
       }, rememberMe);
     }
     pendingOtp = null;
