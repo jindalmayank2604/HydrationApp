@@ -104,6 +104,10 @@ service cloud.firestore {
         && (!('photoURL' in data) || validStringOrNull(data.photoURL, 1000))
         && (!('email' in data) || validStringOrNull(data.email, 200))
         && (!('surveyDone' in data) || data.surveyDone is bool)
+        && (!('stepData' in data) || data.stepData is map)
+        && (!('equippedFrame' in data) || data.equippedFrame == null || data.equippedFrame is string)
+        && (!('purchasedFrames' in data) || data.purchasedFrames is list)
+        && (!('workoutToday' in data) || data.workoutToday is bool)
         && validAchievementState(data)
         && validProfileMeta(data);
     }

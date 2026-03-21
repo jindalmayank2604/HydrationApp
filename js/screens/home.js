@@ -496,31 +496,43 @@ const HomeScreen = (() => {
   let _stepTracking = false;
 
   let _magBuf = [], _saveTimer = null;
+  const _today = () => new Date().toISOString().slice(0,10);
 
-  // Save steps to Firestore (debounced 5s)
+  // Save cumulative step pool to Firestore (debounced 5s to reduce writes)
   const _saveStepsFirestore = (n) => {
     clearTimeout(_saveTimer);
     _saveTimer = setTimeout(async () => {
       try {
         const uid = window.Firebase?.getUserId?.();
         if (!uid || !window.firebase) return;
-        const today = new Date().toISOString().slice(0,10);
         await firebase.firestore().collection('users').doc(uid)
-          .set({ stepData: { [today]: n } }, { merge: true });
-        console.log('[Steps] Saved to Firestore:', n);
-      } catch(e) { console.warn('[Steps] Firestore save failed:', e.message); }
+          .set({ stepData: { [_today()]: n } }, { merge: true });
+        // Update the strip display with latest total
+        _updateStepDisplay(n);
+        console.log('[Steps] Saved', n, 'steps to Firestore');
+      } catch(e) { console.warn('[Steps] Save failed:', e.message); }
     }, 5000);
   };
 
-  // Load today's steps from Firestore
+  // Load today's step pool from Firestore
   const _loadStepsFirestore = async () => {
     try {
       const uid = window.Firebase?.getUserId?.();
       if (!uid || !window.firebase) return 0;
-      const today = new Date().toISOString().slice(0,10);
       const doc = await firebase.firestore().collection('users').doc(uid).get();
-      return doc.exists ? (doc.data()?.stepData?.[today] || 0) : 0;
+      return doc.exists ? (doc.data()?.stepData?.[_today()] || 0) : 0;
     } catch(e) { return 0; }
+  };
+
+  // Update all step display elements
+  const _updateStepDisplay = (n) => {
+    const strip = document.getElementById('homeStepsVal');
+    const live  = document.getElementById('liveStepCount');
+    const card  = document.getElementById('stepsCardCount');
+    const fmt   = n >= 1000 ? (n/1000).toFixed(1)+'k' : String(n||0);
+    if (strip) strip.textContent = fmt;
+    if (live)  live.textContent  = n||0;
+    if (card)  card.textContent  = (n||0).toLocaleString();
   };
 
   const _onStepMotion = (e) => {
@@ -536,13 +548,8 @@ const HomeScreen = (() => {
     if (_stepLastMag < 13 && mag >= 13 && now - _stepLastTime > 450) {
       _stepCount++;
       _stepLastTime = now;
-      // Update display
-      const el = document.getElementById('liveStepCount');
-      const strip = document.getElementById('homeStepsVal');
-      const card = document.getElementById('stepsCardCount');
-      if (el) el.textContent = _stepCount;
-      if (strip) strip.textContent = _stepCount >= 1000 ? (_stepCount/1000).toFixed(1)+'k' : String(_stepCount);
-      if (card) card.textContent = _stepCount.toLocaleString();
+      // Update display immediately
+      _updateStepDisplay(_stepCount);
       // Save to Firestore every 10 steps
       if (_stepCount % 10 === 0) _saveStepsFirestore(_stepCount);
     }
@@ -554,12 +561,11 @@ const HomeScreen = (() => {
     _magBuf = [];
     window.addEventListener('devicemotion', _onStepMotion);
     _stepTracking = true;
-    // Load today's steps from Firestore
+    // Load today's pool from Firestore — continue accumulating from where we left off
     _loadStepsFirestore().then(n => {
       _stepCount = n;
-      const el = document.getElementById('liveStepCount');
-      if (el) el.textContent = _stepCount;
-      console.log('[Steps] Started — loaded', _stepCount, 'steps from Firestore');
+      _updateStepDisplay(n);
+      console.log('[Steps] Loaded', n, 'steps from Firestore for today');
     });
   };
 
@@ -657,6 +663,15 @@ const HomeScreen = (() => {
     });
   };
 
+  // Refresh step display from Firestore on home load
+  const _refreshStepsStrip = async () => {
+    try {
+      const n = await _loadStepsFirestore();
+      if (n > _stepCount) _stepCount = n;
+      _updateStepDisplay(n || _stepCount || 0);
+    } catch(e) { _updateStepDisplay(0); }
+  };
+
   const _syncAndDisplay = async () => {
     if (!window.StepTracker) return;
     const steps = await StepTracker.sync();
@@ -686,22 +701,26 @@ const HomeScreen = (() => {
     }
     if (subEl && steps > 0) subEl.textContent = '🟢 Counting steps live';
 
-    // Log delta as consumed water (tracked via Firestore stepData)
-    const today = new Date().toISOString().slice(0,10);
+    // Log water loss delta to water entries
     try {
       const uid = window.Firebase?.getUserId?.();
-      if (uid && window.firebase && steps > 0) {
+      if (uid && window.firebase && loss > 0 && window.Storage) {
         const doc = await firebase.firestore().collection('users').doc(uid).get();
-        const lastLoggedLoss = doc.exists ? (doc.data()?.stepData?.lastLoggedLoss || 0) : 0;
-        const newLoss = Math.max(0, loss - lastLoggedLoss);
-        if (newLoss >= 10 && window.Storage) {
-          await Storage.addEntry(newLoss, today);
+        const d = doc.exists ? doc.data() : {};
+        const lastLoss = d?.stepData?.lastLoggedLoss || 0;
+        const lastDate = d?.stepData?.lastLoggedDate || '';
+        const todayStr = _today();
+        // Reset if new day
+        const prevLoss = lastDate === todayStr ? lastLoss : 0;
+        const newLoss  = Math.max(0, loss - prevLoss);
+        if (newLoss >= 10) {
+          await Storage.addEntry(newLoss, todayStr);
           await firebase.firestore().collection('users').doc(uid)
-            .set({ stepData: { lastLoggedLoss: loss, lastLoggedDate: today } }, { merge: true });
+            .set({ stepData: { lastLoggedLoss: loss, lastLoggedDate: todayStr } }, { merge: true });
           await updateUI();
         }
       }
-    } catch(e) { console.warn('[Steps] loss log failed:', e.message); }
+    } catch(e) { console.warn('[Steps] water loss log failed:', e.message); }
   };
 
   const _syncStepsAndLogWater = _syncAndDisplay; // alias
