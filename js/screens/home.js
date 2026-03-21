@@ -63,7 +63,8 @@ const HomeScreen = (() => {
           </div>
           <div class="home-strip__divider"></div>
           <div class="home-strip__item" style="gap:4px;">
-            <span class="home-strip__label" style="white-space:nowrap;">Step tracking</span>
+            <span class="home-strip__icon">👟</span>
+            <span class="home-strip__val" id="liveStepCount">0</span>
             <button id="stepTrackToggle" class="step-track-toggle" title="Toggle step tracking">
               <span id="stepTrackToggleIcon">⚫</span>
             </button>
@@ -194,7 +195,8 @@ const HomeScreen = (() => {
 
     updateUI();
     fetchWeatherStrip();
-    initStepsCard();
+    // Step card shown by toggle, not auto-init
+    if (_isStepTrackOn() && _stepTracking) _showStepCard();
   };
 
   /* ── Weather strip ── */
@@ -486,7 +488,43 @@ const HomeScreen = (() => {
   const _isStepTrackOn = () => localStorage.getItem(_stepTrackKey()) === 'true';
   const _setStepTrack = (v) => localStorage.setItem(_stepTrackKey(), v ? 'true' : 'false');
 
-  // Wire the step tracking toggle button (called after every render)
+  // Step tracking — raw DeviceMotion, exactly like the test page
+  let _stepCount = 0;
+  let _stepLastMag = 0;
+  let _stepLastTime = 0;
+  let _stepTracking = false;
+
+  const _onStepMotion = (e) => {
+    const a = e.accelerationIncludingGravity || e.acceleration;
+    if (!a) return;
+    const mag = Math.sqrt((a.x||0)**2 + (a.y||0)**2 + (a.z||0)**2);
+    const now = Date.now();
+    if (_stepLastMag < 11 && mag >= 11 && now - _stepLastTime > 320) {
+      _stepCount++;
+      _stepLastTime = now;
+      // Update display immediately
+      const el = document.getElementById('liveStepCount');
+      const strip = document.getElementById('homeStepsVal');
+      const card = document.getElementById('stepsCardCount');
+      if (el) el.textContent = _stepCount;
+      if (strip) strip.textContent = _stepCount >= 1000 ? (_stepCount/1000).toFixed(1)+'k' : String(_stepCount);
+      if (card) card.textContent = _stepCount.toLocaleString();
+    }
+    _stepLastMag = mag;
+  };
+
+  const _startSteps = () => {
+    if (_stepTracking) return;
+    window.addEventListener('devicemotion', _onStepMotion);
+    _stepTracking = true;
+    console.log('[Steps] Started');
+  };
+
+  const _stopSteps = () => {
+    window.removeEventListener('devicemotion', _onStepMotion);
+    _stepTracking = false;
+  };
+
   const _initStepToggle = () => {
     const btn  = document.getElementById('stepTrackToggle');
     const icon = document.getElementById('stepTrackToggleIcon');
@@ -494,51 +532,56 @@ const HomeScreen = (() => {
 
     const on = _isStepTrackOn();
     icon.textContent = on ? '🟢' : '⚫';
-    btn.title = on ? 'Step tracking ON — tap to disable' : 'Step tracking OFF — tap to enable';
+
+    // If was on before, auto-resume on first user interaction
+    if (on && !_stepTracking) {
+      const resume = () => { _startSteps(); document.removeEventListener('touchstart', resume); };
+      document.addEventListener('touchstart', resume, { once: true });
+    }
 
     btn.onclick = () => {
       const nowOn = !_isStepTrackOn();
       _setStepTrack(nowOn);
       icon.textContent = nowOn ? '🟢' : '⚫';
-      btn.title = nowOn ? 'Step tracking ON — tap to disable' : 'Step tracking OFF — tap to enable';
 
       if (nowOn) {
-        Utils.showToast('🚶 Step tracking ON');
-
-        // Start DeviceMotion listener RIGHT HERE — synchronously inside click handler
-        // This is the exact same pattern as the test page that worked
-        if (window.DeviceMotionEvent) {
-          if (typeof DeviceMotionEvent.requestPermission === 'function') {
-            // iOS — must call requestPermission synchronously in click handler
-            DeviceMotionEvent.requestPermission().then(result => {
-              if (result === 'granted') {
-                StepTracker.setPermission(true);
-                StepTracker.startTracking();
-                initStepsCard();
-              } else {
-                Utils.showToast('❌ Permission denied');
-              }
-            }).catch(() => Utils.showToast('❌ Permission error'));
-          } else {
-            // Android Chrome — no permission dialog, just start
-            StepTracker.setPermission(true);
-            StepTracker.startTracking();
-            initStepsCard();
-          }
+        // iOS needs requestPermission
+        if (typeof DeviceMotionEvent?.requestPermission === 'function') {
+          DeviceMotionEvent.requestPermission().then(r => {
+            if (r === 'granted') { _startSteps(); _showStepCard(); }
+            else Utils.showToast('Motion permission denied');
+          });
         } else {
-          Utils.showToast('❌ Motion sensor not available on this device');
-          initStepsCard(); // show manual entry
+          // Android — just start
+          _startSteps();
+          _showStepCard();
         }
       } else {
-        Utils.showToast('Step tracking OFF');
-        StepTracker?.stopTracking?.();
+        _stopSteps();
         const card = document.getElementById('stepsCard');
-        if (card && card._poll)       { clearInterval(card._poll);       card._poll = null; }
-        if (card && card._sensorTick) { clearInterval(card._sensorTick); card._sensorTick = null; }
         if (card) card.style.display = 'none';
+        Utils.showToast('Step tracking off');
       }
     };
   };
+
+  const _showStepCard = () => {
+    const card = document.getElementById('stepsCard');
+    if (!card) return;
+    card.style.display = 'block';
+    const sub = document.getElementById('stepsCardSub');
+    if (sub) sub.textContent = '🟢 Sensor active — walk to count steps';
+    // Poll display every 3s
+    if (card._poll) clearInterval(card._poll);
+    card._poll = setInterval(() => {
+      const sub2 = document.getElementById('stepsCardSub');
+      if (sub2 && _stepTracking) sub2.textContent = `🟢 ${_stepCount} steps counted`;
+      // Log water loss
+      if (_stepCount > 0 && window.StepTracker && window.Storage) {
+        StepTracker.setTodaySteps(_stepCount);
+      }
+    }, 3000);
+  };;
 
   const init = () => {
     render();
@@ -550,74 +593,7 @@ const HomeScreen = (() => {
     });
   };
 
-  /* ── Steps Card ── */
-  const initStepsCard = async () => {
-    const card = document.getElementById('stepsCard');
-    await _refreshStepsStrip();
-    if (!card) return;
-
-    if (!_isStepTrackOn()) {
-      card.style.display = 'none';
-      if (card._poll) { clearInterval(card._poll); card._poll = null; }
-      if (card._sensorTick) { clearInterval(card._sensorTick); card._sensorTick = null; }
-      StepTracker?.stopTracking?.();
-      return;
-    }
-
-    // Show card
-    card.style.display = 'block';
-    const subEl  = document.getElementById('stepsCardSub');
-    const synBtn = document.getElementById('stepsRefreshBtn');
-
-    if (!window.StepTracker) {
-      if (subEl) subEl.textContent = 'Step tracker unavailable';
-      return;
-    }
-
-    // Permission already requested from toggle button (user gesture)
-    // Just ensure tracking is running
-    if (!StepTracker.hasPermission()) {
-      if (subEl) subEl.textContent = 'Motion sensor unavailable — enter steps manually';
-      _showManualStepInput(card);
-      return;
-    }
-    StepTracker.startTracking();
-
-    if (subEl) subEl.textContent = '🟢 Counting steps live';
-
-    // Show current steps immediately
-    await _syncAndDisplay();
-
-    // Poll every 8s for water logging
-    if (card._poll) clearInterval(card._poll);
-    card._poll = setInterval(() => _syncAndDisplay(), 8000);
-
-    // Live sensor indicator — updates every second to show sensor is active
-    if (card._sensorTick) clearInterval(card._sensorTick);
-    card._sensorTick = setInterval(() => {
-      if (!StepTracker.isTracking()) return;
-      const mag = StepTracker.getLiveMag();
-      const subE = document.getElementById('stepsCardSub');
-      const steps = StepTracker.getTodaySteps();
-      if (subE) {
-        if (steps > 0) {
-          subE.textContent = '🟢 Counting steps live';
-        } else {
-          // Show sensor activity so user knows it's working
-          const bars = mag > 11 ? '████' : mag > 8 ? '███░' : mag > 5 ? '██░░' : '█░░░';
-          subE.textContent = `📡 Sensor active ${bars} — walk to count steps`;
-        }
-      }
-    }, 1000);
-
-    // Sync button
-    const btn = document.getElementById('stepsRefreshBtn');
-    if (btn && !btn._b) {
-      btn._b = true;
-      btn.addEventListener('click', () => _syncAndDisplay());
-    }
-  };
-
+  const initStepsCard = () => { if (_isStepTrackOn()) _showStepCard(); };
 
   const _showManualStepInput = (card) => {
     const footer = card.querySelector('.steps-card__footer');
