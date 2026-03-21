@@ -130,11 +130,16 @@ const StepTracker = (() => {
     return Math.min(2000, Math.round((steps/1000) * mlPer1k * hf / 10) * 10);
   };
 
+  // Expose live magnitude so UI can show sensor activity
+  const getLiveMag = () => _lastMag;
+  const isTracking = () => _active;
+
   return {
     isAndroid, hasPermission, setPermission,
     requestPermission, startTracking, stopTracking,
     getTodaySteps, setTodaySteps,
     calcHydrationLoss, sync,
+    getLiveMag, isTracking,
     startMotionTracking: startTracking,
   };
 })();

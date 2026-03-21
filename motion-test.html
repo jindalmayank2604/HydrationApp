@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Motion Test</title>
+<style>
+  body { font-family: sans-serif; padding: 20px; background: #111; color: #fff; font-size: 18px; }
+  #status { padding: 16px; border-radius: 12px; margin: 10px 0; background: #222; }
+  #mag { font-size: 48px; font-weight: bold; text-align: center; margin: 20px 0; }
+  #steps { font-size: 32px; text-align: center; color: #60a5fa; }
+  button { padding: 16px 24px; font-size: 18px; border-radius: 12px; border: none;
+    background: #3b82f6; color: #fff; cursor: pointer; width: 100%; margin: 8px 0; }
+</style>
+</head>
+<body>
+<h2>📡 Motion Sensor Test</h2>
+<div id="status">Checking sensor...</div>
+<div id="mag">—</div>
+<div id="steps">Steps: 0</div>
+<button onclick="startSensor()">▶ Start Sensor</button>
+<button onclick="requestiOS()">🍎 Request iOS Permission</button>
+<div id="log" style="font-size:12px;color:#888;margin-top:20px;"></div>
+
+<script>
+let steps = 0, lastMag = 0, lastStep = 0;
+const log = (msg) => {
+  document.getElementById('log').innerHTML = msg + '<br>' + document.getElementById('log').innerHTML;
+};
+
+// Check what's available
+window.onload = () => {
+  const s = document.getElementById('status');
+  const checks = [
+    'DeviceMotionEvent: ' + (typeof DeviceMotionEvent !== 'undefined' ? '✅' : '❌'),
+    'requestPermission: ' + (typeof DeviceMotionEvent?.requestPermission === 'function' ? '✅ (iOS)' : '❌ (not needed)'),
+    'isAndroid: ' + (/android/i.test(navigator.userAgent) ? '✅' : '❌'),
+    'isSecure: ' + (location.protocol === 'https:' ? '✅' : '❌ (needs HTTPS!)'),
+    'userAgent: ' + navigator.userAgent.substring(0, 60),
+  ];
+  s.innerHTML = checks.join('<br>');
+  log('Page loaded. Protocol: ' + location.protocol);
+};
+
+function startSensor() {
+  log('Starting DeviceMotion listener...');
+  window.addEventListener('devicemotion', onMotion);
+  document.getElementById('status').textContent = '🟢 Listening for motion...';
+}
+
+async function requestiOS() {
+  if (typeof DeviceMotionEvent?.requestPermission === 'function') {
+    const r = await DeviceMotionEvent.requestPermission();
+    log('iOS permission: ' + r);
+    if (r === 'granted') startSensor();
+  } else {
+    log('No iOS permission needed — starting directly');
+    startSensor();
+  }
+}
+
+function onMotion(e) {
+  const a = e.accelerationIncludingGravity || e.acceleration;
+  if (!a) { log('No acceleration data!'); return; }
+  const mag = Math.sqrt((a.x||0)**2 + (a.y||0)**2 + (a.z||0)**2);
+  document.getElementById('mag').textContent = mag.toFixed(1) + ' m/s²';
+
+  const now = Date.now();
+  if (lastMag < 11 && mag >= 11 && now - lastStep > 320) {
+    steps++;
+    lastStep = now;
+    document.getElementById('steps').textContent = 'Steps: ' + steps;
+    log('Step detected! mag=' + mag.toFixed(1));
+  }
+  lastMag = mag;
+}
+</script>
+</body>
+</html>

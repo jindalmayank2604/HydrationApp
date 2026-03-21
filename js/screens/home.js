@@ -534,6 +534,7 @@ const HomeScreen = (() => {
     if (!_isStepTrackOn()) {
       card.style.display = 'none';
       if (card._poll) { clearInterval(card._poll); card._poll = null; }
+      if (card._sensorTick) { clearInterval(card._sensorTick); card._sensorTick = null; }
       StepTracker?.stopTracking?.();
       return;
     }
@@ -566,9 +567,27 @@ const HomeScreen = (() => {
     // Show current steps immediately
     await _syncAndDisplay();
 
-    // Poll every 8s
+    // Poll every 8s for water logging
     if (card._poll) clearInterval(card._poll);
     card._poll = setInterval(() => _syncAndDisplay(), 8000);
+
+    // Live sensor indicator — updates every second to show sensor is active
+    if (card._sensorTick) clearInterval(card._sensorTick);
+    card._sensorTick = setInterval(() => {
+      if (!StepTracker.isTracking()) return;
+      const mag = StepTracker.getLiveMag();
+      const subE = document.getElementById('stepsCardSub');
+      const steps = StepTracker.getTodaySteps();
+      if (subE) {
+        if (steps > 0) {
+          subE.textContent = '🟢 Counting steps live';
+        } else {
+          // Show sensor activity so user knows it's working
+          const bars = mag > 11 ? '████' : mag > 8 ? '███░' : mag > 5 ? '██░░' : '█░░░';
+          subE.textContent = `📡 Sensor active ${bars} — walk to count steps`;
+        }
+      }
+    }, 1000);
 
     // Sync button
     const btn = document.getElementById('stepsRefreshBtn');
