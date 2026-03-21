@@ -504,24 +504,37 @@ const HomeScreen = (() => {
 
       if (nowOn) {
         Utils.showToast('🚶 Step tracking ON');
-        // Request permission HERE — inside user gesture (button click)
-        // Browsers require user gesture for sensor access
-        (async () => {
-          if (window.StepTracker && !StepTracker.hasPermission()) {
-            const ok = await StepTracker.requestPermission();
-            if (!ok) {
-              Utils.showToast('❌ Motion sensor denied — enter steps manually');
-            }
-          } else if (window.StepTracker) {
+
+        // Start DeviceMotion listener RIGHT HERE — synchronously inside click handler
+        // This is the exact same pattern as the test page that worked
+        if (window.DeviceMotionEvent) {
+          if (typeof DeviceMotionEvent.requestPermission === 'function') {
+            // iOS — must call requestPermission synchronously in click handler
+            DeviceMotionEvent.requestPermission().then(result => {
+              if (result === 'granted') {
+                StepTracker.setPermission(true);
+                StepTracker.startTracking();
+                initStepsCard();
+              } else {
+                Utils.showToast('❌ Permission denied');
+              }
+            }).catch(() => Utils.showToast('❌ Permission error'));
+          } else {
+            // Android Chrome — no permission dialog, just start
+            StepTracker.setPermission(true);
             StepTracker.startTracking();
+            initStepsCard();
           }
-          initStepsCard();
-        })();
+        } else {
+          Utils.showToast('❌ Motion sensor not available on this device');
+          initStepsCard(); // show manual entry
+        }
       } else {
         Utils.showToast('Step tracking OFF');
-        // Stop polling
+        StepTracker?.stopTracking?.();
         const card = document.getElementById('stepsCard');
-        if (card && card._liveInterval) { clearInterval(card._liveInterval); card._liveInterval = null; }
+        if (card && card._poll)       { clearInterval(card._poll);       card._poll = null; }
+        if (card && card._sensorTick) { clearInterval(card._sensorTick); card._sensorTick = null; }
         if (card) card.style.display = 'none';
       }
     };
