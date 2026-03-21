@@ -617,8 +617,9 @@ const HomeScreen = (() => {
     const barEl   = document.getElementById('stepsBar');
     const stripEl = document.getElementById('homeStepsVal');
 
-    if (countEl) countEl.textContent = steps.toLocaleString();
-    if (stripEl) stripEl.textContent = steps >= 1000 ? (steps/1000).toFixed(1)+'k' : (steps > 0 ? String(steps) : '—');
+    if (countEl) countEl.textContent = steps > 0 ? steps.toLocaleString() : '0';
+    if (stripEl) stripEl.textContent = steps >= 1000 ? (steps/1000).toFixed(1)+'k' : (steps > 0 ? String(steps) : '0');
+    if (subEl && steps === 0) subEl.textContent = '🚶 Walk to see steps update live';
 
     // Get weather for dynamic calc
     let temp = 22, humidity = 50;

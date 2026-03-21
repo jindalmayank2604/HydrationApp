@@ -63,22 +63,32 @@ const StepTracker = (() => {
   let _lastStepTime = 0;
   const MIN_STEP_INTERVAL = 300; // ms — min time between steps
 
+  let _motionEventCount = 0;
   const _onMotion = (e) => {
-    const acc = e.accelerationIncludingGravity;
+    _motionEventCount++;
+    // Log first event to confirm sensor is working
+    if (_motionEventCount === 1) console.log('[Steps] DeviceMotion firing ✅ — acc:', e.accelerationIncludingGravity);
+
+    const acc = e.accelerationIncludingGravity || e.acceleration;
     if (!acc) return;
-    const mag = Math.sqrt(acc.x**2 + acc.y**2 + acc.z**2);
+    const mag = Math.sqrt((acc.x||0)**2 + (acc.y||0)**2 + (acc.z||0)**2);
     const now = Date.now();
 
-    // Detect peak crossing threshold (step = magnitude crosses threshold from below)
     if (_lastMagnitude < _threshold && mag >= _threshold) {
       if (now - _lastStepTime > MIN_STEP_INTERVAL) {
         _motionSteps++;
         _lastStepTime = now;
-        // Save every 10 steps
+        // Flush every 5 steps — update strip immediately
         if (_motionSteps % 5 === 0) {
           const stored = getTodaySteps();
           setTodaySteps(stored + _motionSteps);
           _motionSteps = 0;
+          // Update strip display live without waiting for poll
+          const stripEl = document.getElementById('homeStepsVal');
+          const total = getTodaySteps();
+          if (stripEl) stripEl.textContent = total >= 1000 ? (total/1000).toFixed(1)+'k' : String(total);
+          const countEl = document.getElementById('stepsCardCount');
+          if (countEl) countEl.textContent = total.toLocaleString();
         }
       }
     }
