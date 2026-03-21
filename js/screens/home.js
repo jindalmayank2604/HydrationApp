@@ -528,58 +528,53 @@ const HomeScreen = (() => {
   /* ── Steps Card ── */
   const initStepsCard = async () => {
     const card = document.getElementById('stepsCard');
-
-    // Always refresh strip count
     await _refreshStepsStrip();
-
     if (!card) return;
 
-    // Respect the toggle — if OFF, hide card
     if (!_isStepTrackOn()) {
       card.style.display = 'none';
-      if (card._liveInterval) { clearInterval(card._liveInterval); card._liveInterval = null; }
+      if (card._poll) { clearInterval(card._poll); card._poll = null; }
+      StepTracker?.stopTracking?.();
       return;
     }
 
-    // Toggle ON — show card on all platforms
+    // Show card
     card.style.display = 'block';
-
-    const subEl      = document.getElementById('stepsCardSub');
-    const refreshBtn = document.getElementById('stepsRefreshBtn');
+    const subEl  = document.getElementById('stepsCardSub');
+    const synBtn = document.getElementById('stepsRefreshBtn');
 
     if (!window.StepTracker) {
       if (subEl) subEl.textContent = 'Step tracker unavailable';
       return;
     }
 
-    // Request permission if not granted (DeviceMotion on browser, Health Connect on TWA)
+    // Request permission if not yet granted
     if (!StepTracker.hasPermission()) {
-      if (subEl) subEl.textContent = 'Requesting access…';
-      const granted = await StepTracker.requestPermission();
-      if (granted) {
-        if (subEl) subEl.textContent = '🟢 Live tracking active';
-      } else {
-        if (subEl) subEl.textContent = 'Enter steps manually below';
+      if (subEl) subEl.textContent = 'Starting motion sensor…';
+      const ok = await StepTracker.requestPermission();
+      if (!ok) {
+        if (subEl) subEl.textContent = 'Motion sensor unavailable — enter steps manually';
         _showManualStepInput(card);
         return;
       }
     } else {
-      if (subEl) subEl.textContent = '🟢 Live tracking active';
-      StepTracker.startMotionTracking?.(); // ensure motion listener is active
+      StepTracker.startTracking(); // ensure running
     }
 
-    await _syncStepsAndLogWater();
+    if (subEl) subEl.textContent = '🟢 Counting steps live';
 
-    if (card._liveInterval) clearInterval(card._liveInterval);
-    card._liveInterval = setInterval(() => _syncStepsAndLogWater(), 8000); // poll every 8s
+    // Show current steps immediately
+    await _syncAndDisplay();
 
-    if (refreshBtn && !refreshBtn._bound) {
-      refreshBtn._bound = true;
-      refreshBtn.addEventListener('click', async () => {
-        if (subEl) subEl.textContent = 'Syncing…';
-        await _syncStepsAndLogWater();
-        if (subEl) subEl.textContent = '🟢 Live tracking active';
-      });
+    // Poll every 8s
+    if (card._poll) clearInterval(card._poll);
+    card._poll = setInterval(() => _syncAndDisplay(), 8000);
+
+    // Sync button
+    const btn = document.getElementById('stepsRefreshBtn');
+    if (btn && !btn._b) {
+      btn._b = true;
+      btn.addEventListener('click', () => _syncAndDisplay());
     }
   };
 
@@ -606,70 +601,55 @@ const HomeScreen = (() => {
     });
   };
 
-  // Sync steps, calc water loss by formula, log difference as consumed water
-  const _syncStepsAndLogWater = async () => {
+  const _syncAndDisplay = async () => {
     if (!window.StepTracker) return;
     const steps = await StepTracker.sync();
 
+    // Update display elements
     const countEl = document.getElementById('stepsCardCount');
-    const subEl   = document.getElementById('stepsCardSub');
     const lossEl  = document.getElementById('stepsLossLabel');
     const barEl   = document.getElementById('stepsBar');
     const stripEl = document.getElementById('homeStepsVal');
+    const subEl   = document.getElementById('stepsCardSub');
 
-    if (countEl) countEl.textContent = steps > 0 ? steps.toLocaleString() : '0';
-    if (stripEl) stripEl.textContent = steps >= 1000 ? (steps/1000).toFixed(1)+'k' : (steps > 0 ? String(steps) : '0');
-    if (subEl && steps === 0) subEl.textContent = '🚶 Walk to see steps update live';
+    if (countEl) countEl.textContent = steps.toLocaleString();
+    if (stripEl) stripEl.textContent = steps >= 1000 ? (steps/1000).toFixed(1)+'k' : String(steps||0);
+    if (barEl)   barEl.style.width   = Math.min(100, (steps/10000)*100) + '%';
 
-    // Get weather for dynamic calc
-    let temp = 22, humidity = 50;
-    try { const w = window._lastWeather||{}; temp=w.temp||w.temperature||22; humidity=w.humidity||50; } catch(e){}
+    // Weather-based loss calc
+    let temp=22, hum=50;
+    try { const w=window._lastWeather||{}; temp=w.temp||w.temperature||22; hum=w.humidity||50; } catch(e){}
+    const loss = StepTracker.calcHydrationLoss(steps, temp, hum);
 
-    const totalLoss = StepTracker.calcHydrationLoss(steps, temp, humidity);
-
-    // Step bar (10k steps = 100%)
-    if (barEl) barEl.style.width = Math.min(100, (steps/10000)*100) + '%';
-
-    // Loss label with colour coding
-    const lossColor = totalLoss > 1000 ? '#f87171' : totalLoss > 500 ? '#fb923c' : '#4ade80';
+    const lossColor = loss>1000?'#f87171':loss>500?'#fb923c':'#4ade80';
     if (lossEl) {
-      lossEl.textContent = totalLoss > 0
-        ? `💧 ~${totalLoss} ml water loss from ${steps.toLocaleString()} steps`
-        : 'Walk more to see hydration impact';
+      lossEl.textContent = steps > 0
+        ? `💧 ~${loss} ml water loss from ${steps.toLocaleString()} steps`
+        : '🚶 Walk and your step count updates here';
       lossEl.style.color = lossColor;
     }
-    if (subEl) subEl.textContent = '🟢 Live — updates every minute';
+    if (subEl && steps > 0) subEl.textContent = '🟢 Counting steps live';
 
-    // Log only the NEW loss since last sync
+    // Log delta as consumed water
     const today = new Date().toISOString().slice(0,10);
-    const lastDate  = localStorage.getItem('wt_steps_log_date') || '';
-    const lastLoss  = lastDate === today ? parseInt(localStorage.getItem('wt_steps_loss_today')||'0') : 0;
-    const lastSteps = lastDate === today ? parseInt(localStorage.getItem('wt_steps_logged_today')||'0') : 0;
-    const newLoss = Math.max(0, totalLoss - lastLoss);
+    const lastDate  = localStorage.getItem('wt_steps_log_date')||'';
+    const lastLoss  = lastDate===today ? parseInt(localStorage.getItem('wt_steps_loss_today')||'0') : 0;
+    const lastSteps = lastDate===today ? parseInt(localStorage.getItem('wt_steps_logged_today')||'0') : 0;
+    const newLoss = Math.max(0, loss - lastLoss);
 
     if (newLoss >= 10 && steps > lastSteps && window.Storage) {
       try {
         await Storage.addEntry(newLoss, today);
         localStorage.setItem('wt_steps_logged_today', String(steps));
-        localStorage.setItem('wt_steps_loss_today', String(totalLoss));
+        localStorage.setItem('wt_steps_loss_today', String(loss));
         localStorage.setItem('wt_steps_log_date', today);
-        console.log('[Steps] Logged', newLoss, 'ml from', steps, 'steps (temp:', temp, '°C)');
         await updateUI();
-      } catch(e) { console.warn('[Steps] log failed:', e.message); }
+      } catch(e) {}
     }
   };
 
-  const _refreshStepsStrip = async () => {
-    const stepVal = document.getElementById('homeStepsVal');
-    if (!stepVal) return;
-    if (!window.StepTracker) { stepVal.textContent = '—'; return; }
-    const steps = StepTracker.getTodaySteps();
-    stepVal.textContent = steps > 0
-      ? (steps >= 1000 ? (steps / 1000).toFixed(1) + 'k' : String(steps))
-      : '—';
-  };
-
-  const updateStepsDisplay = _syncStepsAndLogWater; // alias
+  const _syncStepsAndLogWater = _syncAndDisplay; // alias
+  const updateStepsDisplay    = _syncAndDisplay; // alias // alias
 
 
   return { init, updateUI, updateStepsDisplay };

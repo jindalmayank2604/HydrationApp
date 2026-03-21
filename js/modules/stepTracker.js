@@ -1,195 +1,140 @@
 /* ══════════════════════════════════════════════════════════════
-   MODULE: StepTracker
-   Strategy (in order of availability):
-   1. window.healthConnect  — TWA/native wrapper (Health Connect)
-   2. DeviceMotionEvent     — Browser accelerometer (step detection)
-   3. Manual entry fallback — user enters steps
+   StepTracker — DeviceMotion step detection for browser PWA
+   Works on: Android Chrome (HTTPS), iOS Safari 13+ (needs permit)
+   Falls back to: manual entry
    ══════════════════════════════════════════════════════════════ */
-
 const StepTracker = (() => {
   const STORAGE_KEY    = 'wt_steps_v1';
   const PERMISSION_KEY = 'wt_steps_permission';
 
-  const isAndroid = () => /android/i.test(navigator.userAgent);
-
-  /* ── LocalStorage helpers ── */
+  /* ── Storage ── */
   const _todayKey = () => {
     const d = new Date();
-    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   };
-  const _readStore  = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch { return {}; } };
-  const _writeStore = (d) => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch {} };
+  const _store    = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY))||{}; } catch { return {}; } };
+  const _save     = (d) => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch {} };
 
-  const getTodaySteps = () => _readStore()[_todayKey()] || 0;
-  const setTodaySteps = (steps) => {
-    const store = _readStore();
-    store[_todayKey()] = Math.max(0, Math.round(steps));
-    const keys = Object.keys(store).sort();
-    if (keys.length > 7) keys.slice(0, keys.length - 7).forEach(k => delete store[k]);
-    _writeStore(store);
+  const getTodaySteps = () => _store()[_todayKey()] || 0;
+  const setTodaySteps = (n) => {
+    const s = _store();
+    s[_todayKey()] = Math.max(0, Math.round(n));
+    // Keep 7 days
+    const keys = Object.keys(s).sort();
+    if (keys.length > 7) keys.slice(0, keys.length-7).forEach(k => delete s[k]);
+    _save(s);
+    // Update UI immediately
+    _updateDisplay(s[_todayKey()]);
   };
 
   const hasPermission = () => localStorage.getItem(PERMISSION_KEY) === 'granted';
   const setPermission = (v) => localStorage.setItem(PERMISSION_KEY, v ? 'granted' : 'denied');
+  const isAndroid = () => /android/i.test(navigator.userAgent);
 
-  /* ── 1. Health Connect (TWA only) ── */
-  const _hasHealthConnect = () => !!(window.healthConnect || window.HealthConnect);
-
-  const _requestHealthConnect = async () => {
-    try {
-      const hc = window.healthConnect || window.HealthConnect;
-      return await hc.requestPermission([{ accessType: 'read', recordType: 'Steps' }]);
-    } catch(e) { return false; }
+  /* ── Live display update ── */
+  const _updateDisplay = (steps) => {
+    const n = steps || getTodaySteps();
+    const strip = document.getElementById('homeStepsVal');
+    const count = document.getElementById('stepsCardCount');
+    if (strip) strip.textContent = n >= 1000 ? (n/1000).toFixed(1)+'k' : String(n||0);
+    if (count) count.textContent = n.toLocaleString();
   };
 
-  const _fetchHealthConnectSteps = async () => {
-    try {
-      const hc = window.healthConnect || window.HealthConnect;
-      if (!hc) return null;
-      const now = new Date();
-      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-      const records = await hc.readRecords('Steps', {
-        timeRangeFilter: { type: 'between', startTime: start.toISOString(), endTime: now.toISOString() }
-      });
-      return (records || []).reduce((s, r) => s + (r.count || 0), 0);
-    } catch(e) { return null; }
-  };
+  /* ── DeviceMotion step detection ── */
+  let _active = false;
+  let _pending = 0;       // steps detected since last flush
+  let _lastMag = 0;
+  let _lastStep = 0;
+  const THRESHOLD = 11;   // m/s² — adjust if too sensitive/insensitive
+  const MIN_GAP   = 320;  // ms between steps
 
-  /* ── 2. DeviceMotion step counter (browser fallback) ── */
-  let _motionSteps = 0;
-  let _lastMagnitude = 0;
-  let _motionActive = false;
-  let _threshold = 12; // m/s² — tune for walking detection
-  let _lastStepTime = 0;
-  const MIN_STEP_INTERVAL = 300; // ms — min time between steps
-
-  let _motionEventCount = 0;
   const _onMotion = (e) => {
-    _motionEventCount++;
-    // Log first event to confirm sensor is working
-    if (_motionEventCount === 1) console.log('[Steps] DeviceMotion firing ✅ — acc:', e.accelerationIncludingGravity);
-
-    const acc = e.accelerationIncludingGravity || e.acceleration;
-    if (!acc) return;
-    const mag = Math.sqrt((acc.x||0)**2 + (acc.y||0)**2 + (acc.z||0)**2);
+    const a = e.accelerationIncludingGravity || e.acceleration;
+    if (!a) return;
+    const mag = Math.sqrt((a.x||0)**2 + (a.y||0)**2 + (a.z||0)**2);
     const now = Date.now();
-
-    if (_lastMagnitude < _threshold && mag >= _threshold) {
-      if (now - _lastStepTime > MIN_STEP_INTERVAL) {
-        _motionSteps++;
-        _lastStepTime = now;
-        // Flush every 5 steps — update strip immediately
-        if (_motionSteps % 5 === 0) {
-          const stored = getTodaySteps();
-          setTodaySteps(stored + _motionSteps);
-          _motionSteps = 0;
-          // Update strip display live without waiting for poll
-          const stripEl = document.getElementById('homeStepsVal');
-          const total = getTodaySteps();
-          if (stripEl) stripEl.textContent = total >= 1000 ? (total/1000).toFixed(1)+'k' : String(total);
-          const countEl = document.getElementById('stepsCardCount');
-          if (countEl) countEl.textContent = total.toLocaleString();
-        }
+    if (_lastMag < THRESHOLD && mag >= THRESHOLD && now - _lastStep > MIN_GAP) {
+      _pending++;
+      _lastStep = now;
+      if (_pending >= 5) {
+        setTodaySteps(getTodaySteps() + _pending);
+        _pending = 0;
       }
     }
-    _lastMagnitude = mag;
+    _lastMag = mag;
   };
 
-  const _startMotionTracking = () => {
-    if (_motionActive) return;
-    if (!window.DeviceMotionEvent) return false;
+  const startTracking = () => {
+    if (_active) return true;
+    if (!window.DeviceMotionEvent) {
+      console.warn('[Steps] DeviceMotionEvent not available');
+      return false;
+    }
     window.addEventListener('devicemotion', _onMotion);
-    _motionActive = true;
-    console.log('[Steps] DeviceMotion tracking started');
+    _active = true;
+    console.log('[Steps] ✅ Motion tracking started');
     return true;
   };
 
-  const _stopMotionTracking = () => {
-    if (!_motionActive) return;
-    // Flush remaining steps
-    if (_motionSteps > 0) {
-      setTodaySteps(getTodaySteps() + _motionSteps);
-      _motionSteps = 0;
-    }
+  const stopTracking = () => {
+    if (!_active) return;
+    if (_pending > 0) { setTodaySteps(getTodaySteps() + _pending); _pending = 0; }
     window.removeEventListener('devicemotion', _onMotion);
-    _motionActive = false;
+    _active = false;
   };
 
-  const _requestMotionPermission = async () => {
-    // iOS 13+ requires explicit permission request
+  /* ── Permission ── */
+  const requestPermission = async () => {
+    // iOS 13+ needs explicit permission
     if (typeof DeviceMotionEvent?.requestPermission === 'function') {
       try {
-        const result = await DeviceMotionEvent.requestPermission();
-        return result === 'granted';
-      } catch(e) { return false; }
+        const r = await DeviceMotionEvent.requestPermission();
+        if (r === 'granted') { setPermission(true); startTracking(); return true; }
+        setPermission(false);
+        return false;
+      } catch(e) {
+        console.warn('[Steps] iOS permission error:', e);
+        return false;
+      }
     }
-    // Android Chrome — permission is implicit, just check if API exists
-    return !!window.DeviceMotionEvent;
-  };
-
-  /* ── Hydration loss from steps + weather ── */
-  const calcHydrationLoss = (steps, weatherTemp, humidity) => {
-    if (!steps || steps <= 0) return 0;
-    const t = weatherTemp || 22;
-    const h = humidity || 50;
-    const humFactor = h > 70 ? 1.15 : h > 50 ? 1.05 : 1.0;
-    let mlPer1000;
-    if      (t >= 38) mlPer1000 = 65 * humFactor;
-    else if (t >= 32) mlPer1000 = 40 * humFactor;
-    else if (t >= 26) mlPer1000 = 30 * humFactor;
-    else if (t >= 18) mlPer1000 = 25 * humFactor;
-    else              mlPer1000 = 17 * humFactor;
-    return Math.min(2000, Math.round((steps / 1000) * mlPer1000 / 10) * 10);
-  };
-
-  /* ── Main permission request ── */
-  const requestPermission = async () => {
-    // Try Health Connect first (TWA)
-    if (_hasHealthConnect()) {
-      const granted = await _requestHealthConnect();
-      setPermission(granted);
-      return granted;
-    }
-    // Try DeviceMotion (browser)
-    const granted = await _requestMotionPermission();
-    if (granted) {
+    // Android Chrome — no explicit permission needed, just start
+    if (window.DeviceMotionEvent) {
       setPermission(true);
-      _startMotionTracking();
+      startTracking();
+      return true;
     }
-    return granted;
+    return false;
   };
 
-  /* ── Sync: fetch latest steps ── */
+  /* ── Sync ── */
   const sync = async () => {
-    // Health Connect (most accurate)
-    if (_hasHealthConnect() && hasPermission()) {
-      const hcSteps = await _fetchHealthConnectSteps();
-      if (hcSteps !== null) { setTodaySteps(hcSteps); return hcSteps; }
-    }
-    // DeviceMotion — flush pending + return stored
-    if (_motionActive && _motionSteps > 0) {
-      setTodaySteps(getTodaySteps() + _motionSteps);
-      _motionSteps = 0;
+    // Flush any pending steps
+    if (_active && _pending > 0) {
+      setTodaySteps(getTodaySteps() + _pending);
+      _pending = 0;
     }
     return getTodaySteps();
   };
 
-  /* ── Auto-start motion tracking if permission already granted ── */
-  if (hasPermission() && !_hasHealthConnect() && window.DeviceMotionEvent) {
-    // Start immediately — no need to ask again
-    _startMotionTracking();
+  /* ── Auto-resume on reload if already granted ── */
+  if (hasPermission() && window.DeviceMotionEvent) {
+    startTracking();
+    console.log('[Steps] Auto-resumed tracking (permission already granted)');
   }
 
+  /* ── Hydration loss formula ── */
+  const calcHydrationLoss = (steps, temp=22, humidity=50) => {
+    if (!steps || steps <= 0) return 0;
+    const hf = humidity > 70 ? 1.15 : humidity > 50 ? 1.05 : 1.0;
+    const mlPer1k = temp>=38 ? 65 : temp>=32 ? 40 : temp>=26 ? 30 : temp>=18 ? 25 : 17;
+    return Math.min(2000, Math.round((steps/1000) * mlPer1k * hf / 10) * 10);
+  };
+
   return {
-    isAndroid,
-    hasPermission,
-    setPermission,
-    requestPermission,
-    getTodaySteps,
-    setTodaySteps,
-    calcHydrationLoss,
-    sync,
-    startMotionTracking: _startMotionTracking,
-    stopMotionTracking:  _stopMotionTracking,
+    isAndroid, hasPermission, setPermission,
+    requestPermission, startTracking, stopTracking,
+    getTodaySteps, setTodaySteps,
+    calcHydrationLoss, sync,
+    startMotionTracking: startTracking,
   };
 })();
