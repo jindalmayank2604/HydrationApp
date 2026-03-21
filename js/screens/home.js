@@ -534,51 +534,77 @@ const HomeScreen = (() => {
 
     if (!card) return;
 
-    const isAndroid = window.StepTracker && StepTracker.isAndroid();
-
-    if (!isAndroid) {
-      card.style.display = 'none';
-      return;
-    }
-
-    // Respect the toggle — if OFF, hide card and don't start polling
+    // Respect the toggle — if OFF, hide card
     if (!_isStepTrackOn()) {
       card.style.display = 'none';
+      if (card._liveInterval) { clearInterval(card._liveInterval); card._liveInterval = null; }
       return;
     }
 
-    // Toggle is ON — show card and start tracking
+    // Toggle ON — show card on all platforms
     card.style.display = 'block';
 
-    const subEl     = document.getElementById('stepsCardSub');
+    const subEl      = document.getElementById('stepsCardSub');
     const refreshBtn = document.getElementById('stepsRefreshBtn');
 
-    // Auto-request Health Connect permission silently on first load
-    if (!StepTracker.hasPermission()) {
-      if (subEl) subEl.textContent = 'Connecting to Health Connect…';
-      const granted = await StepTracker.requestPermission();
-      if (!granted) {
-        if (subEl) subEl.textContent = 'Tap Sync to enable step tracking';
-      }
+    if (!window.StepTracker) {
+      if (subEl) subEl.textContent = 'Step tracker unavailable';
+      return;
     }
 
-    // Initial sync
+    // Request permission if not granted (DeviceMotion on browser, Health Connect on TWA)
+    if (!StepTracker.hasPermission()) {
+      if (subEl) subEl.textContent = 'Requesting access…';
+      const granted = await StepTracker.requestPermission();
+      if (granted) {
+        if (subEl) subEl.textContent = '🟢 Live tracking active';
+      } else {
+        if (subEl) subEl.textContent = 'Enter steps manually below';
+        _showManualStepInput(card);
+        return;
+      }
+    } else {
+      if (subEl) subEl.textContent = '🟢 Live tracking active';
+      StepTracker.startMotionTracking?.(); // ensure motion listener is active
+    }
+
     await _syncStepsAndLogWater();
 
-    // Live polling every 60s — syncs steps and logs water loss automatically
     if (card._liveInterval) clearInterval(card._liveInterval);
-    card._liveInterval = setInterval(() => _syncStepsAndLogWater(), 60000);
+    card._liveInterval = setInterval(() => _syncStepsAndLogWater(), 8000); // poll every 8s
 
-    // Manual sync button
     if (refreshBtn && !refreshBtn._bound) {
       refreshBtn._bound = true;
       refreshBtn.addEventListener('click', async () => {
         if (subEl) subEl.textContent = 'Syncing…';
         await _syncStepsAndLogWater();
+        if (subEl) subEl.textContent = '🟢 Live tracking active';
       });
     }
   };
 
+
+  const _showManualStepInput = (card) => {
+    const footer = card.querySelector('.steps-card__footer');
+    if (!footer || card._manualShown) return;
+    card._manualShown = true;
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;gap:8px;margin-top:10px;align-items:center;';
+    wrap.innerHTML = `
+      <input id="manualStepInput" type="number" inputmode="numeric" placeholder="Enter today's steps"
+        style="flex:1;padding:9px 12px;border-radius:10px;border:1.5px solid rgba(139,92,246,0.4);background:rgba(139,92,246,0.08);color:var(--md-on-background);font-size:14px;outline:none;">
+      <button id="manualStepBtn" style="padding:9px 16px;background:#7c3aed;border:none;border-radius:10px;color:#fff;font-weight:700;cursor:pointer;font-size:13px;white-space:nowrap;">Log</button>`;
+    footer.appendChild(wrap);
+    document.getElementById('manualStepBtn')?.addEventListener('click', () => {
+      const val = parseInt(document.getElementById('manualStepInput')?.value || '0');
+      if (val > 0) {
+        StepTracker.setTodaySteps(val);
+        wrap.remove();
+        card._manualShown = false;
+        _syncStepsAndLogWater();
+      }
+    });
+  };
 
   // Sync steps, calc water loss by formula, log difference as consumed water
   const _syncStepsAndLogWater = async () => {
