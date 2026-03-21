@@ -2,7 +2,7 @@
    SERVICE WORKER — Cache + Background Notifications
    ══════════════════════════════════════════ */
 
-const CACHE_NAME = 'water-tracker-v5';
+const CACHE_NAME = 'water-tracker-v255';
 
 const ASSETS = [
   '/HydrationApp/',
@@ -115,6 +115,11 @@ self.addEventListener('push', (event) => {
 let bgTimer = null;
 
 self.addEventListener('message', (event) => {
+  // Allow app to force SW activation immediately
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+    return;
+  }
   if (event.data?.type === 'SCHEDULE_NOTIFICATIONS') {
     const { intervalMinutes } = event.data;
     if (bgTimer) clearInterval(bgTimer);

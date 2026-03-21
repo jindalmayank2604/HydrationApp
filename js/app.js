@@ -505,11 +505,15 @@ const App = (() => {
       LoginScreen.show();
     } else {
       console.log('[App] → Branch: NO session → showing survey then login');
+      // Fully hide login before showing survey
       LoginScreen.hide();
+      const _existingLogin = document.getElementById('loginOverlay');
+      if (_existingLogin) _existingLogin.style.display = 'none';
+
       if (!SurveyScreen.isDone()) {
-        console.log('[App] → Survey not done, calling SurveyScreen.show()');
+        console.log('[App] → Survey not done, showing survey first');
         SurveyScreen.show((goal) => {
-          console.log('[App] → Survey complete, goal:', goal, '→ showing login');
+          console.log('[App] → Survey complete → showing login');
           if (goal) LocalStorage.setGoal(goal);
           LoginScreen.show();
         }, null);
