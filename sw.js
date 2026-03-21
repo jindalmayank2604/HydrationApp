@@ -2,7 +2,7 @@
    SERVICE WORKER — Cache + Background Notifications
    ══════════════════════════════════════════ */
 
-const CACHE_NAME = 'water-tracker-v261';
+const CACHE_NAME = 'water-tracker-v262';
 
 const ASSETS = [
   '/HydrationApp/',

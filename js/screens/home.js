@@ -504,7 +504,19 @@ const HomeScreen = (() => {
 
       if (nowOn) {
         Utils.showToast('🚶 Step tracking ON');
-        initStepsCard(); // start polling
+        // Request permission HERE — inside user gesture (button click)
+        // Browsers require user gesture for sensor access
+        (async () => {
+          if (window.StepTracker && !StepTracker.hasPermission()) {
+            const ok = await StepTracker.requestPermission();
+            if (!ok) {
+              Utils.showToast('❌ Motion sensor denied — enter steps manually');
+            }
+          } else if (window.StepTracker) {
+            StepTracker.startTracking();
+          }
+          initStepsCard();
+        })();
       } else {
         Utils.showToast('Step tracking OFF');
         // Stop polling
@@ -549,18 +561,14 @@ const HomeScreen = (() => {
       return;
     }
 
-    // Request permission if not yet granted
+    // Permission already requested from toggle button (user gesture)
+    // Just ensure tracking is running
     if (!StepTracker.hasPermission()) {
-      if (subEl) subEl.textContent = 'Starting motion sensor…';
-      const ok = await StepTracker.requestPermission();
-      if (!ok) {
-        if (subEl) subEl.textContent = 'Motion sensor unavailable — enter steps manually';
-        _showManualStepInput(card);
-        return;
-      }
-    } else {
-      StepTracker.startTracking(); // ensure running
+      if (subEl) subEl.textContent = 'Motion sensor unavailable — enter steps manually';
+      _showManualStepInput(card);
+      return;
     }
+    StepTracker.startTracking();
 
     if (subEl) subEl.textContent = '🟢 Counting steps live';
 

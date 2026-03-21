@@ -116,10 +116,20 @@ const StepTracker = (() => {
     return getTodaySteps();
   };
 
-  /* ── Auto-resume on reload if already granted ── */
+  /* ── Auto-resume: attach on first user interaction (gesture required) ── */
   if (hasPermission() && window.DeviceMotionEvent) {
-    startTracking();
-    console.log('[Steps] Auto-resumed tracking (permission already granted)');
+    // Try immediately first (works if page was already interacted with)
+    const _tryStart = () => {
+      if (startTracking()) {
+        console.log('[Steps] Auto-resumed tracking');
+        document.removeEventListener('click', _tryStart);
+        document.removeEventListener('touchstart', _tryStart);
+      }
+    };
+    // Try now, and also on first touch/click as fallback
+    _tryStart();
+    document.addEventListener('click', _tryStart, { once: true });
+    document.addEventListener('touchstart', _tryStart, { once: true });
   }
 
   /* ── Hydration loss formula ── */
