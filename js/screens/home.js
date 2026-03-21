@@ -498,29 +498,35 @@ const HomeScreen = (() => {
   let _magBuf = [], _saveTimer = null;
   const _today = () => new Date().toISOString().slice(0,10);
 
-  // Save cumulative step pool to Firestore (debounced 5s to reduce writes)
+  // Save steps to subcollection users/{uid}/steps/{date}
+  // Subcollection bypasses validUserDoc restriction on main user doc
+  const _stepsRef = () => {
+    const uid = window.Firebase?.getUserId?.();
+    if (!uid || !window.firebase) return null;
+    return firebase.firestore()
+      .collection('users').doc(uid)
+      .collection('steps').doc(_today());
+  };
+
   const _saveStepsFirestore = (n) => {
     clearTimeout(_saveTimer);
     _saveTimer = setTimeout(async () => {
       try {
-        const uid = window.Firebase?.getUserId?.();
-        if (!uid || !window.firebase) return;
-        await firebase.firestore().collection('users').doc(uid)
-          .set({ stepData: { [_today()]: n } }, { merge: true });
-        // Update the strip display with latest total
+        const ref = _stepsRef();
+        if (!ref) return;
+        await ref.set({ count: n, date: _today(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
         _updateStepDisplay(n);
         console.log('[Steps] Saved', n, 'steps to Firestore');
       } catch(e) { console.warn('[Steps] Save failed:', e.message); }
     }, 5000);
   };
 
-  // Load today's step pool from Firestore
   const _loadStepsFirestore = async () => {
     try {
-      const uid = window.Firebase?.getUserId?.();
-      if (!uid || !window.firebase) return 0;
-      const doc = await firebase.firestore().collection('users').doc(uid).get();
-      return doc.exists ? (doc.data()?.stepData?.[_today()] || 0) : 0;
+      const ref = _stepsRef();
+      if (!ref) return 0;
+      const doc = await ref.get();
+      return doc.exists ? (doc.data()?.count || 0) : 0;
     } catch(e) { return 0; }
   };
 
@@ -705,18 +711,14 @@ const HomeScreen = (() => {
     try {
       const uid = window.Firebase?.getUserId?.();
       if (uid && window.firebase && loss > 0 && window.Storage) {
-        const doc = await firebase.firestore().collection('users').doc(uid).get();
-        const d = doc.exists ? doc.data() : {};
-        const lastLoss = d?.stepData?.lastLoggedLoss || 0;
-        const lastDate = d?.stepData?.lastLoggedDate || '';
         const todayStr = _today();
-        // Reset if new day
-        const prevLoss = lastDate === todayStr ? lastLoss : 0;
+        const ref = _stepsRef();
+        const doc = ref ? await ref.get() : null;
+        const prevLoss = (doc?.exists && doc.data()?.date === todayStr) ? (doc.data()?.loggedLoss || 0) : 0;
         const newLoss  = Math.max(0, loss - prevLoss);
         if (newLoss >= 10) {
           await Storage.addEntry(newLoss, todayStr);
-          await firebase.firestore().collection('users').doc(uid)
-            .set({ stepData: { lastLoggedLoss: loss, lastLoggedDate: todayStr } }, { merge: true });
+          if (ref) await ref.set({ loggedLoss: loss, loggedLossDate: todayStr }, { merge: true });
           await updateUI();
         }
       }
