@@ -1,7 +1,8 @@
 /* ═══════════════════════════════════════════════════
    Frames — per-user frame ownership, equip, render
-   State: stored in UserData (Firestore + localStorage)
-   Catalog: Firestore app/frameCatalog
+   Source of truth: Firestore users/{uid}.equippedFrame
+   NO localStorage used for frame state — eliminates
+   all cross-user contamination on shared devices.
    ═══════════════════════════════════════════════════ */
 const Frames = (() => {
 
@@ -40,7 +41,6 @@ const Frames = (() => {
     return `position:absolute;left:${Math.round(-(w-size)/2)+ox}px;top:${Math.round(-(h-size)/2)+oy}px;width:${w}px;height:${h}px;pointer-events:none;${extra}`;
   };
 
-  // ── Admin check ──
   const isAdmin = () => {
     try {
       const s = window.Auth?.getSession?.() || {};
@@ -54,7 +54,7 @@ const Frames = (() => {
     return false;
   };
 
-  // ── Per-user state via UserData (Firestore-backed) ──
+  // ── State from UserData (Firestore-backed, always user-specific) ──
   const _state = () => {
     const s = window.UserData?.getState?.() || {};
     return {
@@ -66,17 +66,24 @@ const Frames = (() => {
 
   const isPurchased = (id) => isAdmin() || _state().purchased.includes(id);
   const isEquipped  = (id) => getEquipped() === id;
+
+  // ── getEquipped: dedicated localStorage key first (instant), then in-memory ──
   const getEquipped = () => {
-    // Read from localStorage directly (most up-to-date, works before Firestore sync)
     try {
-      const stored = JSON.parse(localStorage.getItem('wt_user_state_v2') || '{}');
-      return stored.equippedFrame || null;
+      const uid = (window.Firebase?.getUserId?.())
+        || (window.Auth?.getSession?.()?.uid)
+        || (() => { try { return JSON.parse(localStorage.getItem('wt_session_v1')||'{}').uid||''; } catch(e){return '';} })();
+      if (uid) {
+        const cached = localStorage.getItem('wt_frame_' + uid);
+        if (cached !== null) return cached || null; // '' means explicitly removed
+      }
     } catch(e) {}
     return _state().equipped;
   };
-  const getFrame    = (id) => CATALOG.find(f => f.id === id) || null;
 
-  // ── Purchase: deduct coins, add to purchasedFrames ──
+  const getFrame = (id) => CATALOG.find(f => f.id === id) || null;
+
+  // ── Purchase ──
   const purchase = async (id) => {
     const frame = getFrame(id);
     if (!frame) throw new Error('Frame not found');
@@ -90,32 +97,35 @@ const Frames = (() => {
     Utils.showToast(`🎉 ${frame.emoji||'🖼️'} ${frame.name} unlocked!`);
   };
 
-  // ── Equip: save to localStorage immediately, try Firestore too ──
+  // ── Equip: update in-memory state immediately, then persist ──
   const equip = async (id) => {
-    // No JS ownership check — Firestore rules handle security
-    // Admin always owns all frames, regular users checked server-side
-    
-    // 1. Save to localStorage immediately — always works, survives page reload
-    try {
-      const lsKey = 'wt_user_state_v2';
-      const stored = JSON.parse(localStorage.getItem(lsKey) || '{}');
-      stored.equippedFrame = id || null;
-      localStorage.setItem(lsKey, JSON.stringify(stored));
-    } catch(e) {}
+    console.log('[Frames] equip called — id:', id);
 
-    // 2. Also update in-memory state immediately
+    // 1. Update in-memory state IMMEDIATELY so UI reflects change at once
     if (window.UserData?.getState) {
       try { window.UserData.getState().equippedFrame = id || null; } catch(e) {}
     }
 
-    // 3. Try Firestore save (may fail if rules not deployed yet — non-blocking)
+    // 2. Write to dedicated localStorage key for this user immediately
+    try {
+      const uid = (window.Firebase?.getUserId?.())
+        || (window.Auth?.getSession?.()?.uid)
+        || (() => { try { return JSON.parse(localStorage.getItem('wt_session_v1')||'{}').uid||''; } catch(e){return '';} })();
+      if (uid) {
+        if (id) localStorage.setItem('wt_frame_' + uid, id);
+        else localStorage.removeItem('wt_frame_' + uid);
+        console.log('[Frames] wrote wt_frame_' + uid + ' =', id);
+      }
+    } catch(e) {}
+
+    // 3. Persist to Firestore (non-blocking — UI already updated)
     try {
       await window.UserData?.save?.({ equippedFrame: id || null });
+      console.log('[Frames] Firestore save done — equippedFrame:', id);
     } catch(e) {
-      console.warn('[Frames] Firestore equip save failed (deploy rules!):', e.message);
+      console.warn('[Frames] Firestore save failed:', e.message);
     }
 
-    console.log('[Frames] equip called with id:', id, '| frame:', getFrame(id)?.name);
     Utils.showToast(id ? `✅ ${getFrame(id)?.name||'Frame'} equipped!` : 'Frame removed');
 
     // 4. Republish to leaderboard
@@ -124,7 +134,7 @@ const Frames = (() => {
       if (uid && window.Leaderboard) Leaderboard.publishStreak(uid).catch(()=>{});
     } catch(e) {}
 
-    // 5. Refresh header
+    // 5. Refresh header avatar
     try {
       if (window.App) App.updateHeaderAvatar?.(window.Auth?.getSession?.());
     } catch(e) {}
@@ -139,11 +149,11 @@ const Frames = (() => {
   };
 
   // ── Render avatar with frame ──
-  // frameId=null  → use this user's equipped frame (current user)
-  // frameId=false → no frame (other users without stored frame)
-  // frameId='id'  → show specific frame (leaderboard rows)
+  // frameId=null   → current user's equipped frame (from UserData/Firestore)
+  // frameId=false  → explicitly no frame
+  // frameId='id'   → specific frame (leaderboard row)
   const avatarWithFrame = (photoURL, displayName, size=40, frameId=null, revision=null) => {
-    const eqId  = (frameId === false) ? null : (frameId || getEquipped());
+    const eqId  = (frameId === null) ? getEquipped() : (frameId || null);
     const frame = eqId ? getFrame(eqId) : null;
     const letter = (displayName||'?')[0].toUpperCase();
     const src    = window.Profile?.resolveImageSrc ? Profile.resolveImageSrc(photoURL, revision) : photoURL;

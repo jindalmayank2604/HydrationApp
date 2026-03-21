@@ -231,6 +231,13 @@ const ShopScreen = (() => {
           }
           if (action === 'equip')   await Frames.equip(id);
           if (action === 'unequip') await Frames.equip(null);
+          // Diagnostic
+          const _uid = window.Firebase?.getUserId?.() || window.Auth?.getSession?.()?.uid || '';
+          console.log('[Shop] After equip — uid:', _uid,
+            '| wt_frame_'+_uid+':', localStorage.getItem('wt_frame_'+_uid),
+            '| getEquipped():', Frames.getEquipped(),
+            '| isEquipped(id):', Frames.isEquipped(id),
+            '| state.equippedFrame:', window.UserData?.getState?.()?.equippedFrame);
           _renderFrameGrid(root, window.UserData ? UserData.getState() : state);
           if (window.App) App.updateHeaderAvatar?.(Auth.getSession());
         } catch (err) {

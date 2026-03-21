@@ -10,6 +10,15 @@ const LocalStorage = (() => {
   const GOAL_KEY     = 'wt_goal_v1';
   const DEFAULT_GOAL = 3000;
 
+  // Get UID for scoping keys — prevents data leaking between users on same device
+  const _uid = () => {
+    try {
+      if (window.Firebase && Firebase.getUserId()) return '_' + Firebase.getUserId();
+      if (window.Auth) { const s = Auth.getSession(); if (s && s.uid) return '_' + s.uid; }
+    } catch(e) {}
+    return '';
+  };
+
   const readJSON  = (k, fb) => { try { return JSON.parse(localStorage.getItem(k)) ?? fb; } catch { return fb; } };
   const writeJSON = (k, v)  => localStorage.setItem(k, JSON.stringify(v));
 
@@ -21,13 +30,14 @@ const LocalStorage = (() => {
   const setTotalForDate   = (date, t)    => { const e = getEntries().filter(e => e.date !== date); if (t > 0) e.push({ id: Date.now().toString(), amount: t, date }); saveEntries(e); };
   const deleteEntry       = (id)         => saveEntries(getEntries().filter(e => e.id !== id));
   const getAllDates        = ()           => [...new Set(getEntries().map(e => e.date))].sort().reverse();
-  const getGoal           = ()           => readJSON(GOAL_KEY, DEFAULT_GOAL);
-  const setGoal           = (g)          => writeJSON(GOAL_KEY, g);
+  // Goal is scoped by UID — each user has their own goal
+  const getGoal           = ()           => { const uid = _uid(); return uid ? (readJSON(GOAL_KEY + uid, null) ?? readJSON(GOAL_KEY, DEFAULT_GOAL)) : readJSON(GOAL_KEY, DEFAULT_GOAL); };
+  const setGoal           = (g)          => { const uid = _uid(); writeJSON(GOAL_KEY, g); if (uid) writeJSON(GOAL_KEY + uid, g); };
   const getReminderPrefs  = ()           => readJSON(REMINDER_KEY, { enabled: false, interval: 60 });
   const setReminderPrefs  = (p)          => writeJSON(REMINDER_KEY, p);
   const resetAll          = ()           => localStorage.removeItem(ENTRIES_KEY);
 
-  return { addEntry, getEntriesForDate, getTotalForDate, setTotalForDate, deleteEntry, getAllDates, getGoal, setGoal, getReminderPrefs, setReminderPrefs, resetAll }; // resetAll now exported (STORE-1 fix)
+  return { addEntry, getEntriesForDate, getTotalForDate, setTotalForDate, deleteEntry, getAllDates, getGoal, setGoal, getReminderPrefs, setReminderPrefs, resetAll };
 })();
 
 /* ── Storage proxy — Firestore first, localStorage fallback ── */

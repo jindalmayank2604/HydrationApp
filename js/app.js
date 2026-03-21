@@ -180,6 +180,8 @@ const App = (() => {
   const onAuthReady = async (authResult) => {
     let session = Auth.getSession();
     if (!session) { LoginScreen.show(); return; }
+    // Always start at top of page
+    window.scrollTo(0, 0);
 
     // Hide login overlay
     LoginScreen.hide();
@@ -224,7 +226,22 @@ const App = (() => {
                 Auth.saveSession({ ...latestSession, ...patch }, latestSession.rememberMe !== false);
                 // Update header avatar with fresh photo
                 const refreshed = Auth.getSession();
-                if (refreshed) _updateHeaderAvatar(refreshed);
+                if (refreshed) {
+                  _updateHeaderAvatar(refreshed);
+                  // Also update greeting text with real displayName
+                  const _greetEl = Utils.el('greeting');
+                  if (_greetEl) {
+                    const _n = refreshed.displayName || refreshed.email?.split('@')[0] || 'there';
+                    const _isAdm  = Auth.isAdmin();
+                    const _sessEmail = (refreshed.email || '').toLowerCase().trim();
+                    const _isMag  = _sessEmail.startsWith('sampadagupta') && _sessEmail.endsWith('@gmail.com');
+                    const _isPr   = _isMag || ['pro','admin','maggie'].includes((refreshed.role||'').toLowerCase());
+                    let _badge = '👋';
+                    if (_isAdm)     _badge = '<span class="admin-badge">Admin</span>';
+                    else if (_isPr) _badge = '<span class="role-badge role-badge--pro">Pro</span>';
+                    _greetEl.innerHTML = 'Hey, ' + _n + ' ' + _badge;
+                  }
+                }
               }
             }
           }
@@ -272,6 +289,28 @@ const App = (() => {
       SettingsScreen.renderForRole();
     } else if (_currentScreen === 'home' && window.HomeScreen) {
       HomeScreen.updateUI();
+    }
+    // Always patch vitals and meta immediately after sync completes
+    if (window.SettingsScreen) {
+      SettingsScreen._patchVitals?.();
+      SettingsScreen._patchMetaLine?.();
+    }
+
+    // Update greeting with real username from UserData (loaded from Firestore)
+    const _freshSession = Auth.getSession();
+    const _greetEl2 = Utils.el('greeting');
+    if (_greetEl2 && _freshSession) {
+      const _udState = window.UserData ? UserData.getState() : {};
+      const _realName = _udState.userProfile?.username || _freshSession.displayName || _freshSession.email?.split('@')[0] || 'there';
+      const _isAdm2   = Auth.isAdmin();
+      const _sEmail   = (_freshSession.email || '').toLowerCase().trim();
+      const _isMag2   = _sEmail.startsWith('sampadagupta') && _sEmail.endsWith('@gmail.com');
+      const _role2    = (_freshSession.role || '').toLowerCase();
+      const _isPr2    = _isMag2 || ['pro','admin','maggie'].includes(_role2);
+      let _badge2 = '👋';
+      if (_isAdm2)     _badge2 = '<span class="admin-badge">Admin</span>';
+      else if (_isPr2) _badge2 = '<span class="role-badge role-badge--pro">Pro</span>';
+      _greetEl2.innerHTML = 'Hey, ' + _realName + ' ' + _badge2;
     }
 
     // Load frame catalog from Firestore so frames are ready everywhere
@@ -322,13 +361,13 @@ const App = (() => {
       UserData.subscribe((state) => {
         const session = window.Auth?.getSession?.();
         if (session) _updateHeaderAvatar(session);
-        // Re-render settings if it's the current route (active or not — data just loaded)
-        if (window.SettingsScreen && window.Router) {
-          if (Router.getCurrent() === 'settings') {
-            SettingsScreen.renderForRole?.();
-          } else {
-            SettingsScreen._patchMetaLine?.();
-          }
+        // Only patch specific elements — never full re-render from subscribe
+        // Full re-render causes visual flash + scroll reset every time water is logged
+        if (window.SettingsScreen) {
+          SettingsScreen._patchMetaLine?.();
+          SettingsScreen._patchVitals?.();
+          SettingsScreen._patchWorkoutMode?.();
+          SettingsScreen._patchGoal?.();
         }
       });
     }
@@ -505,5 +544,20 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   Utils.initRipples();
+
+  // Header shortcuts
+  const _avatar = document.getElementById('headerAvatar');
+  const _greeting = document.getElementById('greeting');
+  if (_avatar) {
+    _avatar.style.cursor = 'pointer';
+    _avatar.title = 'Go to Settings';
+    _avatar.addEventListener('click', () => Router.navigate('settings'));
+  }
+  if (_greeting) {
+    _greeting.style.cursor = 'pointer';
+    _greeting.title = 'Go to Home';
+    _greeting.addEventListener('click', () => Router.navigate('home'));
+  }
+
   App.init();
 });

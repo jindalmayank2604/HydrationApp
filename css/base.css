@@ -8,11 +8,12 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-html { font-size: 16px; scroll-behavior: smooth; }
+html { font-size: 16px; }
 
 html { overflow-x: hidden; }
 body {
   font-family: var(--font-body);
+  scroll-behavior: auto;
   background: var(--md-background);
   color: var(--md-on-background);
   min-height: 100vh;
@@ -139,18 +140,28 @@ body {
 
 /* ── TOAST ── */
 .toast {
-  position: fixed; bottom: calc(var(--nav-height) + 12px);
-  left: 50%; transform: translateX(-50%) translateY(8px);
+  position: fixed;
+  /* Sit above orbit nav (z-index 260) and desktop sidebar (z-index 150) */
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
   background: #3C4043; color: #fff;
   padding: 10px 20px; border-radius: var(--radius-pill);
   font-size: var(--text-body); font-weight: 500;
   opacity: 0; pointer-events: none;
   transition: all var(--dur-med) var(--ease-standard);
-  white-space: nowrap; z-index: 200;
+  white-space: nowrap; z-index: 999999;
   box-shadow: var(--shadow-3);
+  max-width: calc(100vw - 48px);
+  text-align: center;
 }
 .toast.visible {
   opacity: 1; transform: translateX(-50%) translateY(0);
+}
+
+/* Desktop: toast can sit lower since no floating orbit nav */
+@media (min-width: 1024px) {
+  .toast { bottom: 32px; }
 }
 
 /* ── SCROLL ── */
@@ -179,3 +190,9 @@ body {
     margin: 0 !important;
   }
 }
+
+/* ── Header shortcuts ───────────────────────────────────────────── */
+.header-avatar { cursor: pointer; transition: opacity 0.15s, transform 0.15s; }
+.header-avatar:hover { opacity: 0.8; transform: scale(1.06); }
+.header-greeting { cursor: pointer; transition: opacity 0.15s; }
+.header-greeting:hover { opacity: 0.7; }

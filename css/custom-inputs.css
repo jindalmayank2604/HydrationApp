@@ -354,7 +354,7 @@ body.dark-mode .an-pro-report-banner {
   left: 50%;
   transform: translateX(-50%);
   width: 290px;
-  z-index: 9999;
+  z-index: 99999;
   background: linear-gradient(145deg, #1e1b2e, #16132a);
   border: 1px solid rgba(139,92,246,0.35);
   border-radius: 18px;
@@ -556,7 +556,7 @@ body.dark-mode .an-pro-report-banner {
   border: 1px solid rgba(139,92,246,0.4);
   border-radius: 12px;
   box-shadow: 0 12px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(139,92,246,0.08);
-  z-index: 10001;
+  z-index: 99999;
   padding: 6px;
   max-height: 220px;
   overflow-y: auto;
@@ -643,7 +643,7 @@ body.dark-mode .an-pro-report-banner {
   border: 1.5px solid rgba(139,92,246,0.35);
   border-radius: 14px;
   box-shadow: 0 16px 48px rgba(0,0,0,0.6), 0 0 0 1px rgba(139,92,246,0.08);
-  z-index: 9000;
+  z-index: 99999;
   padding: 6px;
   overflow: hidden;
   /* Hidden state */

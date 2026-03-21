@@ -565,7 +565,7 @@ body.dark-mode .other-drink-btn { background: #2A2D35; border-color: #3D4148; co
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.45);
-  z-index: 1000;
+  z-index: 10000;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -760,7 +760,7 @@ body.dark-mode .drink-row { background: #2A2D35; border-color: #3D4148; }
    ══════════════════════════════════════════ */
 #scanFAB {
   /* Position and size fully managed by JS drag logic */
-  z-index: 500 !important;
+  z-index: 10000 !important;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;

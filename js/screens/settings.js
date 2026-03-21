@@ -80,40 +80,10 @@ const SettingsScreen = (() => {
                 </div>
               </div>
               <div class="vitals-grid" id="vitalsGrid">
-                ${(() => {
-                  // Read directly from localStorage for immediate display — no async wait needed
-                  let vp = profile;
-                  if (!vp.age && !vp.dob && !vp.height && !vp.gender) {
-                    try {
-                      const _ls = JSON.parse(localStorage.getItem('wt_user_state_v2'));
-                      if (_ls && _ls.userProfile) vp = { ...vp, ..._ls.userProfile };
-                    } catch(e) {}
-                  }
-
-                  let ageStr = '—';
-                  let dobStr = '—';
-                  if (vp.dob) {
-                    const _p = vp.dob.split('-');
-                    const _d = new Date(_p[0], Number(_p[1])-1, _p[2]);
-                    const _a = Math.floor((Date.now()-_d.getTime())/(365.25*24*60*60*1000));
-                    if (!isNaN(_a) && _a > 0) ageStr = _a + '';
-                    dobStr = _d.getDate().toString().padStart(2,'0') + ' ' +
-                      ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][_d.getMonth()] +
-                      ' ' + _d.getFullYear();
-                  } else if (vp.age) {
-                    ageStr = vp.age + '';
-                  }
-
-                  const htStr  = vp.height ? vp.height + ' cm' : '—';
-                  const genStr = vp.gender ? (vp.gender.charAt(0).toUpperCase() + vp.gender.slice(1)) : '—';
-
-                  return [
-                    '<div class="vital-item"><span class="vital-icon">🎂</span><div class="vital-body"><span class="vital-label">Date of Birth</span><span class="vital-value">' + dobStr + '</span></div></div>',
-                    '<div class="vital-item"><span class="vital-icon">🗓️</span><div class="vital-body"><span class="vital-label">Age</span><span class="vital-value">' + (ageStr !== '—' ? ageStr + ' yrs' : '—') + '</span></div></div>',
-                    '<div class="vital-item"><span class="vital-icon">📏</span><div class="vital-body"><span class="vital-label">Height</span><span class="vital-value">' + htStr + '</span></div></div>',
-                    '<div class="vital-item"><span class="vital-icon">⚧️</span><div class="vital-body"><span class="vital-label">Gender</span><span class="vital-value">' + genStr + '</span></div></div>'
-                  ].join('');
-                })()}
+                <div class="vital-item"><span class="vital-icon">🎂</span><div class="vital-body"><span class="vital-label">Date of Birth</span><span class="vital-value" id="vitalDob">—</span></div></div>
+                <div class="vital-item"><span class="vital-icon">🗓️</span><div class="vital-body"><span class="vital-label">Age</span><span class="vital-value" id="vitalAge">—</span></div></div>
+                <div class="vital-item"><span class="vital-icon">📏</span><div class="vital-body"><span class="vital-label">Height</span><span class="vital-value" id="vitalHeight">—</span></div></div>
+                <div class="vital-item"><span class="vital-icon">⚧️</span><div class="vital-body"><span class="vital-label">Gender</span><span class="vital-value" id="vitalGender">—</span></div></div>
               </div>
             </section>
 
@@ -216,16 +186,16 @@ const SettingsScreen = (() => {
           </section>
         `}
 
-        ${isPro ? `
         <section class="tile settings-card">
           <div class="settings-card__head">
-            <div class="settings-section-eyebrow">Reports</div>
-            <div class="settings-section-title">Monthly Hydration Report</div>
-            <div class="settings-section-sub">Download a full PDF breakdown of your hydration data for this month.</div>
+            <div>
+              <div class="settings-section-eyebrow">Reports</div>
+              <div class="settings-section-title">Monthly Hydration Report</div>
+              <div class="settings-section-sub">Full PDF breakdown of your hydration data. Available for Pro & Admin accounts.</div>
+            </div>
           </div>
           <button class="md-btn md-btn--filled md-btn--full" id="downloadReportBtn">⬇️ Download Report</button>
         </section>
-        ` : ''}
 
         <!-- Danger Zone: admin only -->
         ${isAdmin ? `
@@ -250,6 +220,8 @@ const SettingsScreen = (() => {
 
     bindEvents({ isAdmin, profile });
     setTimeout(() => initStyledSelects(), 50);
+    // Patch vitals immediately with whatever state we have, then again after sync
+    _patchVitals();
   }
 
   function bindEvents({ isAdmin, profile }) {
@@ -273,32 +245,69 @@ const SettingsScreen = (() => {
     Utils.el('savePreferencesBtn')?.addEventListener('click', async () => {
       try {
         const _workoutToday = !!Utils.el('settingsWorkoutToday')?.checked;
-        // Immediately persist to separate key so refresh doesn't lose it
+        console.log('[Workout] Toggle value:', _workoutToday);
+        // Write to dedicated wt_workout_<uid> key — this is the ONLY source of truth
         try {
-          const _ls = JSON.parse(localStorage.getItem('wt_user_state_v2')) || {};
-          if (_ls.userProfile) { _ls.userProfile.workoutToday = _workoutToday; localStorage.setItem('wt_user_state_v2', JSON.stringify(_ls)); }
+          const _uid = (window.Firebase && Firebase.getUserId())
+            || (window.Auth && Auth.getSession()?.uid)
+            || (() => { try { return JSON.parse(localStorage.getItem('wt_session_v1')||'{}').uid||''; } catch(e){return '';} })();
+          if (_uid) localStorage.setItem('wt_workout_' + _uid, _workoutToday ? 'true' : 'false');
         } catch(e) {}
+        console.log('[Workout] After localStorage write:', _workoutToday);
         await UserData.saveProfile({
           workoutIntensity: Utils.el('settingsWorkoutIntensity')?.value || profile.workoutIntensity,
           workoutFrequency: Utils.el('settingsWorkoutFrequency')?.value || profile.workoutFrequency,
           workoutToday: _workoutToday,
         });
+        console.log('[Workout] After saveProfile:', UserData.getState().userProfile.workoutToday);
         await UserData.recomputeProgress();
+        console.log('[Workout] After recompute:', UserData.getState().userProfile.workoutToday);
         if (window.HomeScreen) HomeScreen.updateUI();
         Utils.showToast('Preferences updated.');
-        renderForRole();
+
+        // If workout mode just turned ON and on Android — request Health Connect permission
+        if (_workoutToday && window.StepTracker && StepTracker.isAndroid() && !StepTracker.hasPermission()) {
+          Utils.showToast('📱 Requesting step tracking permission…');
+          const granted = await StepTracker.requestPermission();
+          Utils.showToast(granted ? '✅ Step tracking enabled!' : '⚠️ Permission denied — enable in Health Connect settings');
+        }
+
+        // Don't re-render the whole page - just update the workout mode display
+        const _workoutEl = document.querySelector('.settings-mini-stat__value');
+        // Refresh only the stat grid items without full re-render
+        const _statItems = document.querySelectorAll('.settings-mini-stat__value');
+        if (_statItems.length >= 2) {
+          _statItems[1].textContent = _workoutToday ? 'Active' : 'Off';
+        }
+        // Update the toggle itself from current state so it stays correct
+        const _cb = Utils.el('settingsWorkoutToday');
+        if (_cb) _cb.checked = _workoutToday;
       } catch (e) {
         Utils.showToast(e.message);
       }
     });
 
     Utils.el('downloadReportBtn')?.addEventListener('click', () => {
+      console.log('[Report] Clicked. DataExport:', !!window.DataExport, '| role:', Utils.getRole(), '| isPrivileged:', Utils.isPrivileged?.());
       if (window.DataExport?.downloadMonthlyPDF) {
         DataExport.downloadMonthlyPDF();
       } else {
-        Utils.showToast('Report feature loading...');
+        console.error('[Report] DataExport module not loaded');
+        Utils.showToast('❌ Report module not loaded — refresh the page');
       }
     });
+
+    // Use event delegation as fallback — survives any DOM re-renders
+    const _settingsRoot = Utils.el('settings-root');
+    if (_settingsRoot && !_settingsRoot._reportDelegated) {
+      _settingsRoot._reportDelegated = true;
+      _settingsRoot.addEventListener('click', (e) => {
+        if (e.target.closest('#downloadReportBtn')) {
+          console.log('[Report] Delegated click fired');
+          if (window.DataExport?.downloadMonthlyPDF) DataExport.downloadMonthlyPDF();
+        }
+      });
+    }
 
     Utils.el('resetDataBtn')?.addEventListener('click', async () => {
       if (!confirm('This will permanently delete all your hydration data. Are you sure?')) return;
@@ -312,6 +321,10 @@ const SettingsScreen = (() => {
 
     Utils.el('signOutBtn')?.addEventListener('click', async () => {
       if (!confirm('Sign out?')) return;
+      // Clear legacy unscoped keys on signout to prevent data leaking to next user
+      // UID-scoped keys (wt_state_<uid>) stay — they're user-specific already
+      ['wt_user_state_v2', 'wt_user_profile_v1', 'wt_goal_v1',
+       'wt_goal_edit_v1', 'wt_steps_v1', 'wt_steps_permission'].forEach(k => localStorage.removeItem(k));
       await Auth.signOut();
       Firebase.resetUserId();
       Router.navigate('home');
@@ -557,15 +570,25 @@ const SettingsScreen = (() => {
         viewYear=sel.getFullYear(); viewMonth=sel.getMonth();
         calEl = document.createElement('div');
         calEl.className = 'dob-calendar-popup';
-        wrap.style.position = 'relative';
-        wrap.appendChild(calEl);
+        // Use fixed positioning to escape overflow:auto scroll containers (sheet modals)
+        calEl.style.position = 'fixed';
+        calEl.style.zIndex = '999999';
+        calEl.style.width = '290px';
+        calEl.style.left = '50%';
+        calEl.style.transform = 'translateX(-50%)';
+        // Position below the input field
+        const rect = dispInput.getBoundingClientRect();
+        calEl.style.top = (rect.bottom + 8) + 'px';
+        calEl.style.transform = 'translateX(-50%)';
+        document.body.appendChild(calEl); // append to body, not wrap
         renderCalendar();
-        // Delay outsideClick so this same click event doesn't immediately close the calendar
         setTimeout(() => document.addEventListener('click', outsideClick), 200);
       };
 
       const closeCalendar = () => { if(calEl){calEl.remove();calEl=null;} document.removeEventListener('click',outsideClick); };
+      const outsideClick2 = (e) => { if(!wrap.contains(e.target) && calEl && !calEl.contains(e.target)) closeCalendar(); };
       const outsideClick  = (e) => { if(!wrap.contains(e.target) && (!calEl || !calEl.contains(e.target))) closeCalendar(); };
+
 
       dispInput.addEventListener('click', openCalendar);
       wrap.querySelector('.dob-cal-icon').addEventListener('click', openCalendar);
@@ -615,7 +638,9 @@ const SettingsScreen = (() => {
         Utils.showToast('✅ Profile updated!');
         overlay.remove();
         _patchMetaLine();
-        renderForRole();
+        _patchVitals();
+        _patchWorkoutMode();
+        _patchGoal();
       } catch (e) {
         Utils.showToast('❌ ' + e.message);
         saveBtn.disabled = false;
@@ -647,7 +672,7 @@ const SettingsScreen = (() => {
         if (window.App) App.updateHeaderAvatar(Auth.getSession());
         status.textContent = 'Photo updated.';
         Utils.showToast('Profile photo updated.');
-        renderForRole();
+        _patchMetaLine();
       } catch (e) {
         status.textContent = e.message;
       } finally {
@@ -812,7 +837,6 @@ const SettingsScreen = (() => {
         await UserData.addFamilyMember(email);
         Utils.showToast('✅ Family member added.');
         overlay.remove();
-        renderForRole();
       } catch (e) { Utils.showToast(e.message); }
     });
   }
@@ -860,7 +884,7 @@ const SettingsScreen = (() => {
       await UserData.save({ hydrationGoal: val });
       Utils.showToast('✅ Goal set to ' + val + ' ml for today');
       overlay.remove();
-      renderForRole();
+      _patchGoal();
       if (window.HomeScreen) HomeScreen.updateUI();
     });
   }
@@ -941,6 +965,48 @@ const SettingsScreen = (() => {
     return ageStr + ' • ' + htStr + ' • ' + genStr;
   }
 
+  function _patchVitals() {
+    let up = window.UserData ? UserData.getState().userProfile : {};
+    // If UserData not yet synced, read from UID-scoped localStorage immediately
+    if (!up || (!up.age && !up.dob && !up.height)) {
+      try {
+        const _uid = (window.Firebase && Firebase.getUserId())
+          || (window.Auth && Auth.getSession()?.uid)
+          || (() => { try { return JSON.parse(localStorage.getItem('wt_session_v1')||'{}').uid||''; } catch(e){return '';} })();
+        if (_uid) {
+          const _ls = JSON.parse(localStorage.getItem('wt_state_' + _uid) || 'null');
+          if (_ls && _ls.userProfile) up = _ls.userProfile;
+        }
+      } catch(e) {}
+    }
+    if (!up) return;
+
+    const dobEl    = document.getElementById('vitalDob');
+    const ageEl    = document.getElementById('vitalAge');
+    const htEl     = document.getElementById('vitalHeight');
+    const genEl    = document.getElementById('vitalGender');
+
+    if (!dobEl && !ageEl) return; // vitals card not in DOM
+
+    let ageStr = '—', dobStr = '—';
+    if (up.dob) {
+      const _p = up.dob.split('-');
+      const _d = new Date(_p[0], Number(_p[1])-1, _p[2]);
+      const _a = Math.floor((Date.now()-_d.getTime())/(365.25*24*60*60*1000));
+      if (!isNaN(_a) && _a > 0) ageStr = _a + ' yrs';
+      dobStr = _d.getDate().toString().padStart(2,'0') + ' ' +
+        ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][_d.getMonth()] +
+        ' ' + _d.getFullYear();
+    } else if (up.age) {
+      ageStr = up.age + ' yrs';
+    }
+
+    if (dobEl)  dobEl.textContent  = dobStr;
+    if (ageEl)  ageEl.textContent  = ageStr;
+    if (htEl)   htEl.textContent   = up.height ? up.height + ' cm' : '—';
+    if (genEl)  genEl.textContent  = up.gender ? (up.gender.charAt(0).toUpperCase() + up.gender.slice(1)) : '—';
+  }
+
   function _patchMetaLine() {
     const el = document.getElementById('profileMetaLine');
     if (el) {
@@ -959,7 +1025,28 @@ const SettingsScreen = (() => {
   const init = () => {
     Router.on('settings', () => { renderForRole(); setTimeout(() => initStyledSelects(), 50); });
   };
-  return { init, renderForRole, render, _buildMetaLine, _patchMetaLine };
+  function _patchWorkoutMode() {
+    if (!window.UserData) return;
+    const up = UserData.getState().userProfile;
+    // Update the mini-stat value
+    const statEls = document.querySelectorAll('.settings-mini-stat__value');
+    if (statEls.length >= 2) statEls[1].textContent = up.workoutToday ? 'Active' : 'Off';
+    // Keep the toggle checkbox in sync
+    const cb = document.getElementById('settingsWorkoutToday');
+    if (cb) cb.checked = !!up.workoutToday;
+  }
+
+  function _patchGoal() {
+    if (!window.UserData) return;
+    const goal = UserData.getState().hydrationGoal;
+    const statEls = document.querySelectorAll('.settings-mini-stat__value');
+    if (statEls.length >= 1 && goal) statEls[0].textContent = goal + ' ml';
+    // Also update the hero goal display
+    const heroEl = document.getElementById('heroGoal');
+    if (heroEl && goal) heroEl.textContent = goal;
+  }
+
+  return { init, renderForRole, render, _buildMetaLine, _patchMetaLine, _patchVitals, _patchWorkoutMode, _patchGoal };
 })();
 
 SettingsScreen._handleProUpgrade = () => {

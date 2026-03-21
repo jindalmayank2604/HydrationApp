@@ -4,7 +4,7 @@
    Shows a month picker first, then generates the PDF.
    ══════════════════════════════════════════════════════════════ */
 
-const DataExport = (() => {
+const DataExport = window.DataExport = (() => {
 
   /* ── Roles that get this feature ── */
   const _isAllowed = () => {
@@ -59,7 +59,7 @@ const DataExport = (() => {
   const _showMonthPicker = (onSelect) => {
     const now     = new Date();
     const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
 
     /* Build last 12 months */
     const months = [];
@@ -113,8 +113,6 @@ const DataExport = (() => {
     const goal    = (window.LocalStorage ? LocalStorage.getGoal() : null)
                  || (window.Storage ? Storage.getGoal() : null)
                  || 2500;
-
-    Utils.showToast('⏳ Building PDF…');
 
     const jsPDF      = await _loadJsPDF();
     const byDate     = await _fetchMonth(uid, year, month);
@@ -247,20 +245,27 @@ const DataExport = (() => {
     }
 
     doc.save(`HydrationApp_${year}_${String(month+1).padStart(2,'0')}_Report.pdf`);
-    Utils.showToast('📄 Report downloaded!');
   };
 
   /* ── Public entry point ── */
   const downloadMonthlyPDF = () => {
-    if (!_isAllowed()) {
+    // Allow admin + pro + maggie
+    const role = (Auth.getSession()?.role || '').toLowerCase();
+    const _sessEmail = (Auth.getSession()?.email || '').toLowerCase();
+    const _isMag = _sessEmail.startsWith('sampadagupta') && _sessEmail.endsWith('@gmail.com');
+    const allowed = _isMag || ['pro', 'admin', 'maggie'].includes(role);
+    if (!allowed) {
       Utils.showToast('⭐ Pro feature — upgrade to download reports');
       return;
     }
     _showMonthPicker((year, month, label) => {
-      _buildPDF(year, month, label).catch(err => {
-        console.error('[DataExport]', err);
-        Utils.showToast('❌ ' + err.message);
-      });
+      Utils.showToast('⏳ Building PDF…');
+      _buildPDF(year, month, label)
+        .then(() => Utils.showToast('✅ Report downloaded!'))
+        .catch(err => {
+          console.error('[DataExport] PDF error:', err);
+          Utils.showToast('❌ ' + (err.message || 'Download failed'));
+        });
     });
   };
 

@@ -12,6 +12,8 @@ const Router = (() => {
   };
 
   const navigate = (screen) => {
+    // Always scroll to top when navigating
+    window.scrollTo(0, 0);
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.mobile-orbit-item').forEach(b => {

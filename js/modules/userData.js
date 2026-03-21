@@ -1,6 +1,26 @@
 const UserData = (() => {
-  const LOCAL_KEY = 'wt_user_state_v2';
-  const PROFILE_KEY = 'wt_user_profile_v1'; // separate key — never overwritten by non-profile saves
+  // Keys are scoped by UID so multiple users on same device don't share data
+  const _getUID = () => {
+    try {
+      if (window.Firebase && Firebase.getUserId()) return Firebase.getUserId();
+      if (window.Auth) { const s = Auth.getSession(); if (s && s.uid) return s.uid; }
+      // Hard refresh fallback: read UID directly from session storage before Firebase/Auth init
+      const _raw = localStorage.getItem('wt_session_v1');
+      if (_raw) { const _s = JSON.parse(_raw); if (_s && _s.uid) return _s.uid; }
+    } catch(e) {}
+    return null;
+  };
+  const LOCAL_KEY   = 'wt_user_state_v2';
+  const _localKey   = () => { const u = _getUID(); return u ? 'wt_state_' + u : null; };
+  const PROFILE_KEY = 'wt_user_profile_v1';
+  const _profileKey = () => { const u = _getUID(); return u ? 'wt_profile_' + u : null; };
+
+  // Dedicated per-user keys — these NEVER interact with Firestore
+  const _readWorkoutToday  = () => { try { const u=_getUID(); return u ? localStorage.getItem('wt_workout_'+u)==='true' : false; } catch(e){ return false; } };
+  const _writeWorkoutToday = (v) => { try { const u=_getUID(); if(u) localStorage.setItem('wt_workout_'+u, v?'true':'false'); } catch(e){} };
+  const _readEquippedFrame  = () => { try { const u=_getUID(); return u ? (localStorage.getItem('wt_frame_'+u)||null) : null; } catch(e){ return null; } };
+  const _writeEquippedFrame = (v) => { try { const u=_getUID(); if(u){ if(v) localStorage.setItem('wt_frame_'+u,v); else localStorage.removeItem('wt_frame_'+u); } } catch(e){} };
+
   const listeners = new Set();
 
   const defaultState = () => ({
@@ -34,13 +54,18 @@ const UserData = (() => {
   let state = defaultState();
   let ready = false;
 
-  // Immediately load from localStorage so getState() returns real data before sync() completes
+  // Immediately load from UID-scoped localStorage so getState() returns real data instantly.
+  // _getUID() reads from wt_session_v1 which is available even before Firebase initializes.
   try {
-    const _stored = JSON.parse(localStorage.getItem('wt_user_state_v2'));
-    if (_stored && _stored.userProfile) {
-      state = _stored;
-      // Ensure workoutToday boolean is correctly typed
-      state.userProfile.workoutToday = state.userProfile.workoutToday === true;
+    const _earlyUID = _getUID();
+    if (_earlyUID) {
+      const _earlyKey = 'wt_state_' + _earlyUID;
+      const _stored = JSON.parse(localStorage.getItem(_earlyKey));
+      if (_stored && _stored.userProfile) {
+        state = _stored;
+        state.userProfile.workoutToday = _readWorkoutToday();
+        if (!state.equippedFrame) state.equippedFrame = _readEquippedFrame();
+      }
     }
   } catch(e) {}
 
@@ -61,25 +86,41 @@ const UserData = (() => {
 
   function readLocal() {
     try {
-      return JSON.parse(localStorage.getItem(LOCAL_KEY)) || defaultState();
+      const key = _localKey();
+      if (!key) return defaultState(); // UID not known yet — return clean state
+      const scoped = localStorage.getItem(key);
+      if (scoped) return JSON.parse(scoped) || defaultState();
+      return defaultState();
     } catch {
       return defaultState();
     }
   }
 
   function writeLocal(nextState) {
-    localStorage.setItem(LOCAL_KEY, JSON.stringify(nextState));
+    const data = JSON.stringify(nextState);
+    const key = _localKey();
+    if (key) localStorage.setItem(key, data); // only write scoped key when UID is known
+    // DO NOT write to legacy unscoped key — prevents cross-user contamination
   }
 
   function readProfile() {
-    try { return JSON.parse(localStorage.getItem(PROFILE_KEY)) || {}; } catch { return {}; }
+    try {
+      const key = _profileKey();
+      if (!key) return {};
+      const scoped = localStorage.getItem(key);
+      if (scoped) return JSON.parse(scoped) || {};
+      return {};
+    } catch { return {}; }
   }
 
   function writeProfile(profile) {
     if (!profile) return;
-    // Only write if the profile has at least one real value
     const hasData = profile.age != null || profile.height != null || (profile.gender && profile.gender !== '') || profile.dob != null || (profile.username && profile.username !== '');
-    if (hasData) localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+    if (hasData) {
+      const data = JSON.stringify(profile);
+      const pkey = _profileKey();
+      if (pkey) localStorage.setItem(pkey, data); // only when UID known
+    }
   }
 
   function mergeState(base, patch) {
@@ -302,8 +343,14 @@ const UserData = (() => {
     if (_profileBefore.gender   !== ''  && up.gender   === ''  ) up.gender   = _profileBefore.gender;
     if (_profileBefore.dob      != null && up.dob      == null) up.dob      = _profileBefore.dob;
     if (_profileBefore.username !== ''  && up.username === ''  ) up.username = _profileBefore.username;
-    if (_profileBefore.photoURL != null && up.photoURL == null) up.photoURL = _profileBefore.photoURL;
+    if (_profileBefore.photoURL   != null && up.photoURL   == null) up.photoURL   = _profileBefore.photoURL;
+    // workoutToday: if it was explicitly true before, keep it true unless patch explicitly sets it false
+    if (_profileBefore.workoutToday === true && up.workoutToday !== true && !('workoutToday' in (patch.userProfile || {}))) {
+      up.workoutToday = true;
+    }
     syncGoalToStorage(state.hydrationGoal);
+    _writeWorkoutToday(state.userProfile.workoutToday);
+    _writeEquippedFrame(state.equippedFrame);
     if (!remoteOnly) writeLocal(state);
 
     const doc = await usersDoc();
@@ -328,6 +375,9 @@ const UserData = (() => {
           profile: _pf,
           profileMeta: _pf,
           userProfile: _pf,
+          equippedFrame: state.equippedFrame || null,
+          purchasedFrames: state.purchasedFrames || [],
+          workoutToday: !!state.userProfile.workoutToday,
           achievementState: {
             currentStreak: state.currentStreak,
             lastActiveDate: state.lastActiveDate,
@@ -380,9 +430,13 @@ const UserData = (() => {
             freeTierUsage:    as.freeTierUsage,
           }));
 
-          // Restore frames
+          // Restore frames from Firestore — achievementState is primary source
           if (as.equippedFrame !== undefined) state.equippedFrame = as.equippedFrame;
           if (Array.isArray(as.purchasedFrames)) state.purchasedFrames = as.purchasedFrames;
+          // Also check top-level equippedFrame field (may be more recent than achievementState)
+          if (data.equippedFrame !== undefined) state.equippedFrame = data.equippedFrame;
+          if (Array.isArray(data.purchasedFrames)) state.purchasedFrames = data.purchasedFrames;
+          _writeEquippedFrame(state.equippedFrame); // cache locally for instant display
 
           // Read profile from ALL sources — 'profile' top-level field has highest priority,
           // then profileMeta, then achievementState.userProfile, then local state.
@@ -415,27 +469,13 @@ const UserData = (() => {
             dob:              pick(dp.dob, tp.dob, pm.dob, ap.dob, lp.dob),
             workoutIntensity: pick(dp.workoutIntensity, tp.workoutIntensity, pm.workoutIntensity, ap.workoutIntensity, lp.workoutIntensity) || 'light',
             workoutFrequency: pick(dp.workoutFrequency, tp.workoutFrequency, pm.workoutFrequency, ap.workoutFrequency, lp.workoutFrequency) || 'moderate',
-            workoutToday:     (() => {
-              // localStorage is THE source of truth for workoutToday.
-              // Firestore may have a stale value from a previous session.
-              try {
-                const _ls = JSON.parse(localStorage.getItem('wt_user_state_v2'));
-                if (_ls && _ls.userProfile && typeof _ls.userProfile.workoutToday === 'boolean') {
-                  return _ls.userProfile.workoutToday;
-                }
-              } catch(e) {}
-              // Fallback to Firestore sources
-              const _wt = dp.workoutToday != null ? dp.workoutToday :
-                         (tp.workoutToday != null ? tp.workoutToday :
-                         (pm.workoutToday != null ? pm.workoutToday :
-                         (ap.workoutToday != null ? ap.workoutToday : lp.workoutToday)));
-              return !!_wt;
-            })(),
+            workoutToday:     _readWorkoutToday(),
             surveyData:       dp.surveyData || tp.surveyData || pm.surveyData || ap.surveyData || data.surveyData || lp.surveyData || {},
           };
 
           if (data.hydrationGoal) state.hydrationGoal = data.hydrationGoal;
 
+          state.userProfile.workoutToday = _readWorkoutToday(); // enforce after Firestore rebuild
           console.log('[UserData] sync result — age:', state.userProfile.age, 'height:', state.userProfile.height, 'gender:', state.userProfile.gender);
         }
       } catch (e) {
@@ -462,12 +502,24 @@ const UserData = (() => {
         dob:              pick2(up.dob, cachedProfile.dob),
         workoutIntensity: pick2(up.workoutIntensity, cachedProfile.workoutIntensity) || 'light',
         workoutFrequency: pick2(up.workoutFrequency, cachedProfile.workoutFrequency) || 'moderate',
-        workoutToday:     up.workoutToday === true,
+        workoutToday:     _readWorkoutToday(), // dedicated local key — survives all syncs
         surveyData:       up.surveyData || cachedProfile.surveyData || {},
       };
     }
     console.log('[UserData] final profile after sync+cache merge:', JSON.stringify({age:state.userProfile.age, height:state.userProfile.height, gender:state.userProfile.gender, dob:state.userProfile.dob}));
+    state.userProfile.workoutToday = _readWorkoutToday(); // final enforcement
+    state.equippedFrame = _readEquippedFrame() || state.equippedFrame; // final enforcement
     ready = true;
+    // Persist synced state to UID-scoped localStorage immediately so hard refresh gets correct data
+    writeLocal(state);
+    // Immediately patch leaderboard equippedFrame to match Firestore truth
+    // This corrects any stale frame written from a different user's localStorage
+    const _lbUid = Firebase.getUserId();
+    if (_lbUid && window.firebase && firebase.apps?.length) {
+      firebase.firestore().collection('leaderboard').doc(_lbUid)
+        .set({ equippedFrame: state.equippedFrame || null }, { merge: true })
+        .catch(() => {});
+    }
     syncGoalToStorage(state.hydrationGoal);
     writeLocal(state);
     emit();

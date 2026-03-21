@@ -510,9 +510,13 @@ const AnalyticsScreen = (() => {
           const medal  = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`;
           const isTop3 = i < 3;
           const streak = r[field] || 0;
-          // Use equipped frame from leaderboard data (stored globally per user)
+          // For current user: use live getEquipped() so frame shows instantly after equip
+          // For others: use leaderboard doc's equippedFrame (published to Firestore)
+          const _frameId = isMe
+            ? (window.Frames ? null : false)           // null = use getEquipped() for self
+            : (r.equippedFrame || false);              // false = no frame if not set
           const avatar = window.Frames
-            ? Frames.avatarWithFrame(r.photoURL||null, r.displayName||'?', 36, r.equippedFrame||false)
+            ? Frames.avatarWithFrame(r.photoURL||null, r.displayName||'?', 36, _frameId)
             : (window.Profile
               ? Profile.avatarHTML(r.photoURL||null, r.displayName||'?', 36)
               : `<div style="width:36px;height:36px;border-radius:50%;background:var(--md-primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex-shrink:0;">${(r.displayName||'?').charAt(0).toUpperCase()}</div>`);
@@ -582,7 +586,7 @@ const AnalyticsScreen = (() => {
     rowsEl.innerHTML = rows.map((row) => `
       <div class="lb-row ${row.email === Auth.getSession()?.email ? 'lb-row--me' : ''}">
         <div class="lb-medal lb-medal--num">${row.rank}</div>
-        ${window.Frames ? Frames.avatarWithFrame(row.photoURL || null, row.displayName || row.email || '?', 38, row.equippedFrame || false) : (window.Profile ? Profile.avatarHTML(row.photoURL || null, row.displayName || row.email || '?', 38) : '')}
+        ${window.Frames ? Frames.avatarWithFrame(row.photoURL || null, row.displayName || row.email || '?', 38, row.uid === currentUid ? null : (row.equippedFrame || false)) : (window.Profile ? Profile.avatarHTML(row.photoURL || null, row.displayName || row.email || '?', 38) : '')}
         <div class="lb-info">
           <div class="lb-name">${Utils.escapeHtml(row.displayName || row.email || 'Member')}</div>
           <div class="lb-sub">${Utils.escapeHtml(row.email || '')}</div>

@@ -132,15 +132,11 @@ const Leaderboard = (() => {
         }
       } catch (e) { /* non-fatal, use session values */ }
 
-      // Include equipped frame — read from localStorage (most up-to-date after equip)
-      let equippedFrame = null;
-      try {
-        const ls = JSON.parse(localStorage.getItem('wt_user_state_v2') || '{}');
-        equippedFrame = ls.equippedFrame || null;
-      } catch(e) {}
-      if (!equippedFrame && window.UserData) {
-        equippedFrame = UserData.getState().equippedFrame || null;
-      }
+      // Equipped frame: read from dedicated localStorage key (instant, user-specific)
+      // Falls back to UserData in-memory state
+      let equippedFrame = (window.Frames ? Frames.getEquipped() : null)
+        || (window.UserData ? UserData.getState().equippedFrame : null)
+        || null;
 
       await db().collection('leaderboard').doc(uid).set({
         displayName,

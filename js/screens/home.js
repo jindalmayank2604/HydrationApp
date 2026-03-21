@@ -56,15 +56,10 @@ const HomeScreen = (() => {
             <span class="home-strip__label">day streak</span>
           </div>
           <div class="home-strip__divider"></div>
-          <div class="home-strip__item" id="stepsStripItem" style="display:none;">
+          <div class="home-strip__item" id="stepsStripItem">
             <span class="home-strip__icon">👟</span>
-            <span class="home-strip__val" id="homeStepsVal">0</span>
+            <span class="home-strip__val" id="homeStepsVal">—</span>
             <span class="home-strip__label">steps today</span>
-          </div>
-          <div class="home-strip__item" id="drinksStripItem">
-            <span class="home-strip__icon">🥤</span>
-            <span class="home-strip__val">${usage.limit ? usage.remaining : '∞'}</span>
-            <span class="home-strip__label">${usage.limit ? 'drinks left' : 'unlimited'}</span>
           </div>
         </div>
 
@@ -485,74 +480,92 @@ const HomeScreen = (() => {
   /* ── Steps Card ── */
   const initStepsCard = async () => {
     const card = document.getElementById('stepsCard');
+
+    // Always update steps strip value (even if card hidden)
+    await _refreshStepsStrip();
+
     if (!card) return;
 
-    // Show card whenever workout mode is on — on all platforms
     const st = window.UserData ? UserData.getState() : {};
-    const workoutOn = st.userProfile && st.userProfile.workoutToday === true;
+    const workoutOn = !!(st.userProfile && st.userProfile.workoutToday);
 
     if (!workoutOn) {
       card.style.display = 'none';
-      // Show drinks in strip, hide steps
-      const stepsStrip = document.getElementById('stepsStripItem');
-      const drinksStrip = document.getElementById('drinksStripItem');
-      if (stepsStrip)  stepsStrip.style.display = 'none';
-      if (drinksStrip) drinksStrip.style.display = '';
       return;
     }
 
+    // Workout mode is ON — show the card
     card.style.display = 'block';
 
-    // Show steps in strip, hide drinks
-    const stepsStrip = document.getElementById('stepsStripItem');
-    const drinksStrip = document.getElementById('drinksStripItem');
-    if (stepsStrip)  stepsStrip.style.display = '';
-    if (drinksStrip) drinksStrip.style.display = 'none';
-
     const isAndroid = window.StepTracker && StepTracker.isAndroid();
-    const subEl = document.getElementById('stepsCardSub');
+    const subEl     = document.getElementById('stepsCardSub');
     const refreshBtn = document.getElementById('stepsRefreshBtn');
 
     if (!isAndroid) {
-      // Desktop/non-Android: show static message, no Health Connect
-      if (subEl) subEl.textContent = 'Step tracking available on Android';
+      if (subEl)      subEl.textContent = 'Step tracking requires Android + Health Connect';
       if (refreshBtn) refreshBtn.style.display = 'none';
       const countEl = document.getElementById('stepsCardCount');
       const lossEl  = document.getElementById('stepsLossLabel');
       const barEl   = document.getElementById('stepsBar');
       if (countEl) countEl.textContent = '—';
-      if (lossEl)  lossEl.textContent = 'Install on Android to track steps';
-      if (barEl)   barEl.style.width = '0%';
+      if (lossEl)  lossEl.textContent  = 'Open on Android to enable step tracking';
+      if (barEl)   barEl.style.width   = '0%';
       return;
     }
 
+    // Android: request Health Connect permission the FIRST time workout mode is turned on
     if (!StepTracker.hasPermission()) {
-      if (subEl) subEl.textContent = 'Tap Sync to connect Health Connect';
+      if (subEl) subEl.textContent = 'Requesting Health Connect access…';
+      const granted = await StepTracker.requestPermission();
+      if (granted) {
+        if (subEl) subEl.textContent = '✅ Health Connect connected!';
+      } else {
+        if (subEl) subEl.textContent = 'Permission denied — tap Sync to retry';
+      }
     }
+
     await updateStepsDisplay();
 
-    document.getElementById('stepsRefreshBtn')?.addEventListener('click', async () => {
-      if (subEl) subEl.textContent = 'Syncing…';
-      if (!StepTracker.hasPermission()) {
-        const granted = await StepTracker.requestPermission();
-        if (!granted) {
-          if (subEl) subEl.textContent = 'Permission denied — grant in Health Connect';
-          return;
+    // Prevent duplicate listeners
+    const btn = document.getElementById('stepsRefreshBtn');
+    if (btn && !btn._stepsBound) {
+      btn._stepsBound = true;
+      btn.addEventListener('click', async () => {
+        if (subEl) subEl.textContent = 'Syncing…';
+        if (!StepTracker.hasPermission()) {
+          const granted = await StepTracker.requestPermission();
+          if (!granted) {
+            if (subEl) subEl.textContent = 'Permission denied — grant in Health Connect settings';
+            return;
+          }
         }
-      }
-      await updateStepsDisplay();
-    });
+        await updateStepsDisplay();
+      });
+    }
+  };
+
+  // Refresh the strip count without showing the full card
+  const _refreshStepsStrip = async () => {
+    const stepVal = document.getElementById('homeStepsVal');
+    if (!stepVal) return;
+    if (!window.StepTracker) { stepVal.textContent = '—'; return; }
+    const steps = StepTracker.getTodaySteps();
+    stepVal.textContent = steps > 0
+      ? (steps >= 1000 ? (steps / 1000).toFixed(1) + 'k' : String(steps))
+      : '—';
   };
 
   const updateStepsDisplay = async () => {
     if (!window.StepTracker) return;
     const steps = await StepTracker.sync();
     const stepVal = document.getElementById('homeStepsVal');
+    if (stepVal) stepVal.textContent = steps > 0
+      ? (steps >= 1000 ? (steps/1000).toFixed(1)+'k' : String(steps))
+      : '—';
     const countEl = document.getElementById('stepsCardCount');
     const subEl   = document.getElementById('stepsCardSub');
     const lossEl  = document.getElementById('stepsLossLabel');
     const barEl   = document.getElementById('stepsBar');
-    if (stepVal) stepVal.textContent = steps >= 1000 ? (steps/1000).toFixed(1)+'k' : String(steps);
     if (countEl) countEl.textContent = steps.toLocaleString();
     let temp = 22, humidity = 50;
     try {
