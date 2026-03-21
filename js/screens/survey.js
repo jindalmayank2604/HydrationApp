@@ -1,5 +1,5 @@
 const SurveyScreen = (() => {
-  const SURVEY_KEY = 'wt_survey_done';
+  const SURVEY_KEY  = 'wt_survey_done';
   const SURVEY_DATA = 'wt_survey_data';
 
   const isDoneLocally = () => localStorage.getItem(SURVEY_KEY) === 'true';
@@ -18,27 +18,17 @@ const SurveyScreen = (() => {
         return true;
       }
       return false;
-    } catch (e) {
-      console.warn('[Survey] Firestore check failed:', e.message);
-      return false;
-    }
+    } catch(e) { return false; }
   }
 
-  const checkAfterLogin = async (uid) => {
-    if (isDoneLocally()) return true;
-    return checkFirestore(uid);
-  };
-
+  const checkAfterLogin = async (uid) => isDoneLocally() ? true : checkFirestore(uid);
   const calcGoal = (data) => UserData.calculateHydrationGoal(data);
 
   async function saveToFirestore(uid, goal, data) {
     if (!uid || !window.firebase || !firebase.apps?.length) return;
     await firebase.firestore().collection('users').doc(uid).set({
-      surveyDone: true,
-      hydrationGoal: goal,
-      goal,
-      surveyData: data,
-      profileMeta: data,
+      surveyDone: true, hydrationGoal: goal, goal,
+      surveyData: data, profileMeta: data,
       surveyCompletedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
   }
@@ -47,114 +37,264 @@ const SurveyScreen = (() => {
     const existing = document.getElementById('surveyOverlay');
     if (existing) existing.remove();
 
+    // Survey state
+    const answers = { age: null, height: null, gender: '', workoutFrequency: 'moderate', workoutIntensity: 'light' };
+    let currentStep = 0;
+
+    const steps = [
+      {
+        emoji: '💧',
+        caricature: '🧍',
+        title: "Let's personalise\nyour hydration",
+        subtitle: 'A quick 30-second setup to calculate your perfect daily water intake.',
+        type: 'welcome',
+      },
+      {
+        emoji: '🎂',
+        caricature: '🧒',
+        title: 'How old are you?',
+        subtitle: 'Age affects how much water your body needs.',
+        type: 'number',
+        field: 'age',
+        placeholder: 'e.g. 24',
+        min: 8, max: 100,
+        unit: 'years',
+      },
+      {
+        emoji: '📏',
+        caricature: '🧍',
+        title: "What's your height?",
+        subtitle: "We'll use this to estimate your body mass.",
+        type: 'number',
+        field: 'height',
+        placeholder: 'e.g. 172',
+        min: 90, max: 250,
+        unit: 'cm',
+      },
+      {
+        emoji: '⚧️',
+        caricature: '🧑',
+        title: 'How do you identify?',
+        subtitle: 'Biological differences affect hydration needs.',
+        type: 'chips',
+        field: 'gender',
+        options: [
+          { value: 'male',       label: 'Male',       emoji: '👨' },
+          { value: 'female',     label: 'Female',     emoji: '👩' },
+          { value: 'non-binary', label: 'Non-binary', emoji: '🧑' },
+          { value: 'other',      label: 'Prefer not to say', emoji: '💙' },
+        ],
+      },
+      {
+        emoji: '🏃',
+        caricature: '🏋️',
+        title: 'How often do you work out?',
+        subtitle: 'Exercise significantly increases your water needs.',
+        type: 'chips',
+        field: 'workoutFrequency',
+        options: [
+          { value: 'rare',     label: 'Rarely',       emoji: '🛋️' },
+          { value: 'light',    label: '1–2×/week',    emoji: '🚶' },
+          { value: 'moderate', label: '3–4×/week',    emoji: '🏃' },
+          { value: 'frequent', label: '5–6×/week',    emoji: '💪' },
+          { value: 'daily',    label: 'Every day',    emoji: '🏅' },
+        ],
+      },
+      {
+        emoji: '⚡',
+        caricature: '🔥',
+        title: 'How intense are your workouts?',
+        subtitle: 'Harder workouts = more sweat = more water needed.',
+        type: 'chips',
+        field: 'workoutIntensity',
+        options: [
+          { value: 'none',    label: 'Very light',  emoji: '🧘' },
+          { value: 'light',   label: 'Light',       emoji: '🚴' },
+          { value: 'moderate',label: 'Moderate',    emoji: '🏊' },
+          { value: 'intense', label: 'Intense',     emoji: '🏋️' },
+          { value: 'athlete', label: 'Athlete',     emoji: '🥇' },
+        ],
+      },
+      {
+        emoji: '🎯',
+        caricature: '✨',
+        title: 'Your personalised goal',
+        subtitle: "Based on your answers, here's your smart daily water intake.",
+        type: 'result',
+      },
+    ];
+
     const overlay = document.createElement('div');
     overlay.id = 'surveyOverlay';
-    overlay.innerHTML = `
-      <div class="survey-modern">
-        <div class="survey-modern__hero">
-          <div class="survey-modern__badge">Personalized hydration</div>
-          <h2>Build your goal around your body and workout routine</h2>
-          <p>We use age, height, gender, workout frequency, and workout intensity to set a smarter daily hydration target.</p>
-        </div>
-        <div class="survey-modern__form">
-          <label>
-            <span class="md-input-label">Age</span>
-            <input id="surveyAge" class="md-input" type="number" min="8" max="100" placeholder="e.g. 24" />
-          </label>
-          <label>
-            <span class="md-input-label">Height (cm)</span>
-            <input id="surveyHeight" class="md-input" type="number" min="90" max="250" placeholder="e.g. 172" />
-          </label>
-          <label>
-            <span class="md-input-label">Gender</span>
-            <select id="surveyGender" class="md-input">
-              <option value="">Select one</option>
-              <option value="female">Female</option>
-              <option value="male">Male</option>
-              <option value="non-binary">Non-binary</option>
-              <option value="other">Other</option>
-            </select>
-          </label>
-          <label>
-            <span class="md-input-label">Workout frequency</span>
-            <select id="surveyFrequency" class="md-input">
-              <option value="rare">Rarely</option>
-              <option value="light">1-2 days/week</option>
-              <option value="moderate" selected>3-4 days/week</option>
-              <option value="frequent">5-6 days/week</option>
-              <option value="daily">Daily</option>
-            </select>
-          </label>
-          <label>
-            <span class="md-input-label">Workout intensity</span>
-            <select id="surveyIntensity" class="md-input">
-              <option value="none">Minimal</option>
-              <option value="light" selected>Light</option>
-              <option value="moderate">Moderate</option>
-              <option value="intense">Intense</option>
-              <option value="athlete">Athlete</option>
-            </select>
-          </label>
-          <label class="settings-toggle-card">
-            <div>
-              <div class="switch-title">Workout day today?</div>
-              <div class="switch-sub">Turn this on to apply the daily workout boost immediately.</div>
-            </div>
-            <input id="surveyWorkoutToday" type="checkbox" />
-          </label>
-          <div class="survey-modern__result" id="surveyResult">Recommended goal: 3000 ml/day</div>
-          <div class="survey-modern__actions">
-            <button id="surveySkip" class="md-btn">Skip</button>
-            <button id="surveySave" class="md-btn md-btn--filled">Save & Continue</button>
+
+    const render = () => {
+      const step = steps[currentStep];
+      const isLast = currentStep === steps.length - 1;
+      const isFirst = currentStep === 0;
+      const goal = calcGoal({ ...answers, workoutToday: false });
+      const progress = Math.round((currentStep / (steps.length - 1)) * 100);
+
+      overlay.innerHTML = `
+        <div class="sv-card" id="svCard">
+          <!-- Progress bar -->
+          <div class="sv-progress-wrap">
+            <div class="sv-progress-bar" style="width:${progress}%"></div>
+          </div>
+
+          <!-- Step counter -->
+          <div class="sv-step-counter">${isFirst ? '' : `${currentStep} of ${steps.length - 2}`}</div>
+
+          <!-- Caricature -->
+          <div class="sv-caricature">${step.caricature}</div>
+
+          <!-- Content -->
+          <div class="sv-content">
+            <div class="sv-emoji">${step.emoji}</div>
+            <h2 class="sv-title">${step.title.replace(/\n/g, '<br>')}</h2>
+            <p class="sv-sub">${step.subtitle}</p>
+
+            ${step.type === 'welcome' ? `
+              <button class="sv-cta-btn" id="svNext">
+                Let's go 💧
+              </button>
+              <button class="sv-skip" id="svSkip">Skip for now →</button>
+            ` : ''}
+
+            ${step.type === 'number' ? `
+              <div class="sv-number-wrap">
+                <input class="sv-number-input" id="svNumberInput"
+                  type="number" inputmode="numeric"
+                  min="${step.min}" max="${step.max}"
+                  placeholder="${step.placeholder}"
+                  value="${answers[step.field] || ''}" />
+                <span class="sv-number-unit">${step.unit}</span>
+              </div>
+              <div class="sv-nav-row">
+                <button class="sv-back-btn" id="svBack">← Back</button>
+                <button class="sv-next-btn" id="svNext">Continue →</button>
+              </div>
+            ` : ''}
+
+            ${step.type === 'chips' ? `
+              <div class="sv-chips">
+                ${step.options.map(o => `
+                  <button class="sv-chip${answers[step.field] === o.value ? ' sv-chip--sel' : ''}"
+                    data-val="${o.value}">
+                    <span class="sv-chip-emoji">${o.emoji}</span>
+                    <span class="sv-chip-label">${o.label}</span>
+                  </button>
+                `).join('')}
+              </div>
+              <div class="sv-nav-row">
+                <button class="sv-back-btn" id="svBack">← Back</button>
+                <button class="sv-next-btn" id="svNext">Continue →</button>
+              </div>
+            ` : ''}
+
+            ${step.type === 'result' ? `
+              <div class="sv-result-card">
+                <div class="sv-result-goal">${goal} <span class="sv-result-unit">ml/day</span></div>
+                <div class="sv-result-label">Your personalised hydration goal</div>
+                <div class="sv-result-breakdown">
+                  <div class="sv-result-row"><span>Age</span><strong>${answers.age || '—'} yrs</strong></div>
+                  <div class="sv-result-row"><span>Height</span><strong>${answers.height || '—'} cm</strong></div>
+                  <div class="sv-result-row"><span>Gender</span><strong>${answers.gender || '—'}</strong></div>
+                  <div class="sv-result-row"><span>Workout</span><strong>${answers.workoutFrequency}</strong></div>
+                </div>
+              </div>
+              <button class="sv-cta-btn" id="svSave">
+                Start tracking 🚀
+              </button>
+              <button class="sv-back-btn" style="margin-top:8px" id="svBack">← Edit answers</button>
+            ` : ''}
           </div>
         </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
+      `;
 
-    const fields = ['surveyAge', 'surveyHeight', 'surveyGender', 'surveyFrequency', 'surveyIntensity', 'surveyWorkoutToday'];
-    const getData = () => ({
-      age: Number(Utils.el('surveyAge')?.value) || null,
-      height: Number(Utils.el('surveyHeight')?.value) || null,
-      gender: Utils.el('surveyGender')?.value || '',
-      workoutFrequency: Utils.el('surveyFrequency')?.value || 'moderate',
-      workoutIntensity: Utils.el('surveyIntensity')?.value || 'light',
-      workoutToday: !!Utils.el('surveyWorkoutToday')?.checked,
-      surveyData: {
-        age: Number(Utils.el('surveyAge')?.value) || null,
-        height: Number(Utils.el('surveyHeight')?.value) || null,
-        gender: Utils.el('surveyGender')?.value || '',
-      },
-    });
+      // Animate in
+      requestAnimationFrame(() => {
+        const card = overlay.querySelector('#svCard');
+        if (card) { card.style.opacity = '0'; card.style.transform = 'translateY(24px) scale(0.97)'; }
+        requestAnimationFrame(() => {
+          if (card) { card.style.transition = 'opacity 0.35s ease, transform 0.35s cubic-bezier(0.34,1.2,0.64,1)'; card.style.opacity = '1'; card.style.transform = 'none'; }
+        });
+      });
 
-    const renderGoal = () => {
-      const goal = calcGoal(getData());
-      const resultEl = Utils.el('surveyResult');
-      if (resultEl) resultEl.textContent = `Recommended goal: ${goal} ml/day`;
+      // Focus number input
+      if (step.type === 'number') {
+        setTimeout(() => overlay.querySelector('#svNumberInput')?.focus(), 400);
+      }
+
+      // Chip click handlers — select and auto-advance after brief delay
+      overlay.querySelectorAll('.sv-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+          answers[step.field] = btn.dataset.val;
+          overlay.querySelectorAll('.sv-chip').forEach(b => b.classList.remove('sv-chip--sel'));
+          btn.classList.add('sv-chip--sel');
+          // Auto-advance after 350ms so user sees selection
+          setTimeout(() => goNext(), 350);
+        });
+      });
+
+      // Next button
+      overlay.querySelector('#svNext')?.addEventListener('click', goNext);
+
+      // Back button
+      overlay.querySelector('#svBack')?.addEventListener('click', () => {
+        currentStep = Math.max(0, currentStep - 1);
+        render();
+      });
+
+      // Skip
+      overlay.querySelector('#svSkip')?.addEventListener('click', async () => {
+        localStorage.setItem(SURVEY_KEY, 'true');
+        LocalStorage.setGoal(3000);
+        overlay.remove();
+        if (onComplete) onComplete(3000);
+      });
+
+      // Save
+      overlay.querySelector('#svSave')?.addEventListener('click', async () => {
+        const data = { ...answers, workoutToday: false, surveyData: { ...answers } };
+        const finalGoal = calcGoal(data);
+        localStorage.setItem(SURVEY_KEY, 'true');
+        localStorage.setItem(SURVEY_DATA, JSON.stringify(data));
+        LocalStorage.setGoal(finalGoal);
+        if (uid) await saveToFirestore(uid, finalGoal, data).catch(() => {});
+        if (window.UserData) await UserData.saveProfile(data).catch(() => {});
+        overlay.remove();
+        if (onComplete) onComplete(finalGoal);
+      });
+
+      // Enter key on number inputs
+      overlay.querySelector('#svNumberInput')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') goNext();
+      });
     };
 
-    fields.forEach((id) => Utils.el(id)?.addEventListener(id === 'surveyWorkoutToday' ? 'change' : 'input', renderGoal));
-    renderGoal();
+    const goNext = () => {
+      const step = steps[currentStep];
 
-    Utils.el('surveySkip')?.addEventListener('click', async () => {
-      localStorage.setItem(SURVEY_KEY, 'true');
-      if (uid) await saveToFirestore(uid, 3000, {});
-      LocalStorage.setGoal(3000);
-      overlay.remove();
-      if (onComplete) onComplete(3000);
-    });
+      // Validate number input
+      if (step.type === 'number') {
+        const val = Number(overlay.querySelector('#svNumberInput')?.value);
+        if (!val || val < step.min || val > step.max) {
+          const input = overlay.querySelector('#svNumberInput');
+          if (input) { input.style.borderColor = '#ef4444'; input.focus(); }
+          setTimeout(() => { const i = overlay.querySelector('#svNumberInput'); if (i) i.style.borderColor = ''; }, 1200);
+          return;
+        }
+        answers[step.field] = val;
+      }
 
-    Utils.el('surveySave')?.addEventListener('click', async () => {
-      const data = getData();
-      const goal = calcGoal(data);
-      localStorage.setItem(SURVEY_KEY, 'true');
-      localStorage.setItem(SURVEY_DATA, JSON.stringify(data));
-      LocalStorage.setGoal(goal);
-      if (uid) await saveToFirestore(uid, goal, data);
-      if (window.UserData) await UserData.saveProfile(data);
-      overlay.remove();
-      if (onComplete) onComplete(goal);
-    });
+      if (currentStep < steps.length - 1) {
+        currentStep++;
+        render();
+      }
+    };
+
+    document.body.appendChild(overlay);
+    render();
   }
 
   return { show, isDone, isDoneLocally, checkAfterLogin, calcGoal, saveToFirestore };

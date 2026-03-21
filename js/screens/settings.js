@@ -62,8 +62,8 @@ const SettingsScreen = (() => {
                   <span class="goal-edit-hint">${(() => { try { const g=JSON.parse(localStorage.getItem('wt_goal_edit_v1')||'{}'); const today=new Date().toISOString().slice(0,10); return g.date===today ? '🔒 locked today' : '✏️ tap to edit'; } catch(e){ return '✏️ tap to edit'; } })()}</span>
                 </div>
                 <div class="settings-mini-stat">
-                  <span class="settings-mini-stat__label">Workout mode</span>
-                  <strong class="settings-mini-stat__value">${profile.workoutToday ? 'Active' : 'Off'}</strong>
+                  <span class="settings-mini-stat__label">Step tracking</span>
+                  <strong class="settings-mini-stat__value">🟢 Auto</strong>
                 </div>
                 <div class="settings-mini-stat">
                   <span class="settings-mini-stat__label">Coins</span>
@@ -139,14 +139,7 @@ const SettingsScreen = (() => {
                     <input type="hidden" id="settingsWorkoutFrequency" value="${profile.workoutFrequency || 'moderate'}"/>
                   </div>
                 </label>
-                <label class="toggle-wrap">
-                    <div class="toggle-text">
-                      <div class="toggle-title">Workout day boost</div>
-                      <div class="toggle-sub">Increase today's hydration goal in real time.</div>
-                    </div>
-                    <input id="settingsWorkoutToday" type="checkbox" class="toggle-input" ${profile.workoutToday ? 'checked' : ''} />
-                    <div class="toggle-track"></div>
-                  </label>
+
               </div>
               <button id="savePreferencesBtn" class="md-btn md-btn--filled md-btn--full">Update Preferences</button>
             </section>
@@ -265,11 +258,29 @@ const SettingsScreen = (() => {
         if (window.HomeScreen) HomeScreen.updateUI();
         Utils.showToast('Preferences updated.');
 
-        // If workout mode just turned ON and on Android — request Health Connect permission
-        if (_workoutToday && window.StepTracker && StepTracker.isAndroid() && !StepTracker.hasPermission()) {
-          Utils.showToast('📱 Requesting step tracking permission…');
-          const granted = await StepTracker.requestPermission();
-          Utils.showToast(granted ? '✅ Step tracking enabled!' : '⚠️ Permission denied — enable in Health Connect settings');
+        // Dynamic Water Intake toggled ON — request Health Connect and start live tracking
+        if (_workoutToday) {
+          if (window.StepTracker && StepTracker.isAndroid()) {
+            if (!StepTracker.hasPermission()) {
+              Utils.showToast('📱 Requesting Health Connect access…');
+              const granted = await StepTracker.requestPermission();
+              if (granted) {
+                Utils.showToast('✅ Dynamic Water Intake active!');
+                // Start live step sync immediately
+                if (window.HomeScreen) HomeScreen.updateUI();
+              } else {
+                Utils.showToast('⚠️ Permission denied — grant in Health Connect settings');
+              }
+            } else {
+              Utils.showToast('🚶 Tracking steps — goal updates live');
+              if (window.HomeScreen) HomeScreen.updateUI();
+            }
+          } else {
+            Utils.showToast('📱 Dynamic intake active — install on Android for step tracking');
+          }
+        } else {
+          Utils.showToast('Dynamic Water Intake turned off');
+          if (window.HomeScreen) HomeScreen.updateUI();
         }
 
         // Don't re-render the whole page - just update the workout mode display
@@ -497,7 +508,11 @@ const SettingsScreen = (() => {
                   ${months.map((m,i)=>`<div class="dob-month-opt${i===viewMonth?' dob-month-sel':''}" data-m="${i}">${m}</div>`).join('')}
                 </div>
               </div>
-              <input class="dob-year" type="number" value="${viewYear}" min="1900" max="${today.getFullYear()}"/>
+              <div class="dob-year-wrap">
+                <button class="dob-year-btn" id="dobYearPrev">&#8249;</button>
+                <span class="dob-year-val">${viewYear}</span>
+                <button class="dob-year-btn" id="dobYearNext">&#8250;</button>
+              </div>
             </div>
             <button class="dob-cal-nav" id="dobCalNext">&#8250;</button>
           </div>
@@ -542,7 +557,8 @@ const SettingsScreen = (() => {
             });
           }, 0);
         }
-        calEl.querySelector('.dob-year').onchange = (e) => { const y=Number(e.target.value); if(y>=1900&&y<=today.getFullYear()){viewYear=y;renderCalendar();} };
+        calEl.querySelector('#dobYearPrev').onclick = (e) => { e.stopPropagation(); if(viewYear>1900){viewYear--;renderCalendar();} };
+        calEl.querySelector('#dobYearNext').onclick = (e) => { e.stopPropagation(); if(viewYear<today.getFullYear()){viewYear++;renderCalendar();} };
         calEl.querySelector('.dob-btn-clear').onclick = (e) => { e.stopPropagation(); hiddenInput.value=''; dispInput.value=''; closeCalendar(); };
         calEl.querySelector('.dob-btn-done').onclick  = (e) => { e.stopPropagation(); closeCalendar(); };
         calEl.querySelectorAll('.dob-cal-day:not(.dob-cal-disabled)').forEach(span => {
@@ -1026,14 +1042,14 @@ const SettingsScreen = (() => {
     Router.on('settings', () => { renderForRole(); setTimeout(() => initStyledSelects(), 50); });
   };
   function _patchWorkoutMode() {
-    if (!window.UserData) return;
-    const up = UserData.getState().userProfile;
-    // Update the mini-stat value
-    const statEls = document.querySelectorAll('.settings-mini-stat__value');
-    if (statEls.length >= 2) statEls[1].textContent = up.workoutToday ? 'Active' : 'Off';
-    // Keep the toggle checkbox in sync
+    const _uid = (window.Firebase?.getUserId?.()) || (window.Auth?.getSession?.()?.uid)
+      || (() => { try { return JSON.parse(localStorage.getItem('wt_session_v1')||'{}').uid||''; } catch(e){return '';} })();
+    const on = _uid ? (localStorage.getItem('wt_workout_' + _uid) === 'true')
+      : !!(window.UserData && UserData.getState().userProfile.workoutToday);
+    const statEl = document.getElementById('dynamicIntakeStat');
+    if (statEl) statEl.textContent = on ? '🟢 On' : '⚫ Off';
     const cb = document.getElementById('settingsWorkoutToday');
-    if (cb) cb.checked = !!up.workoutToday;
+    if (cb) cb.checked = on;
   }
 
   function _patchGoal() {

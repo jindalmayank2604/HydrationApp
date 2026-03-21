@@ -61,6 +61,13 @@ const HomeScreen = (() => {
             <span class="home-strip__val" id="homeStepsVal">—</span>
             <span class="home-strip__label">steps today</span>
           </div>
+          <div class="home-strip__divider"></div>
+          <div class="home-strip__item" style="gap:4px;">
+            <span class="home-strip__label" style="white-space:nowrap;">Step tracking</span>
+            <button id="stepTrackToggle" class="step-track-toggle" title="Toggle step tracking">
+              <span id="stepTrackToggleIcon">⚫</span>
+            </button>
+          </div>
         </div>
 
         <!-- Weather strip -->
@@ -71,9 +78,9 @@ const HomeScreen = (() => {
           <div class="steps-card">
             <div class="steps-card__header">
               <div class="steps-card__left">
-                <span class="steps-card__icon">👟</span>
+                <span class="steps-card__icon">🚶</span>
                 <div>
-                  <div class="steps-card__title">Steps Today</div>
+                  <div class="steps-card__title" id="stepsCardTitle">Step Hydration</div>
                   <div class="steps-card__sub" id="stepsCardSub">Syncing from Health Connect…</div>
                 </div>
               </div>
@@ -86,7 +93,7 @@ const HomeScreen = (() => {
               <div class="steps-card__bar" id="stepsBar" style="width:0%"></div>
             </div>
             <div class="steps-card__footer">
-              <span id="stepsLossLabel" class="steps-card__loss">Calculating…</span>
+              <span id="stepsLossLabel" class="steps-card__loss">Calculating water loss…</span>
               <button class="steps-card__refresh" id="stepsRefreshBtn">↻ Sync</button>
             </div>
           </div>
@@ -197,6 +204,7 @@ const HomeScreen = (() => {
     try {
       const w = await Weather.fetch();
       if (!w) return;
+      window._lastWeather = w; // cache for step hydration calc
       const advice = Weather.getAdvice(w);
       if (!advice) return;
 
@@ -469,11 +477,51 @@ const HomeScreen = (() => {
     }
   };
 
+  // Step tracking persistence key — per user, survives refreshes
+  const _stepTrackKey = () => {
+    const uid = (window.Firebase?.getUserId?.()) || (window.Auth?.getSession?.()?.uid)
+      || (() => { try { return JSON.parse(localStorage.getItem('wt_session_v1')||'{}').uid||''; } catch(e){return '';} })();
+    return uid ? 'wt_step_track_' + uid : 'wt_step_track_default';
+  };
+  const _isStepTrackOn = () => localStorage.getItem(_stepTrackKey()) === 'true';
+  const _setStepTrack = (v) => localStorage.setItem(_stepTrackKey(), v ? 'true' : 'false');
+
+  // Wire the step tracking toggle button (called after every render)
+  const _initStepToggle = () => {
+    const btn  = document.getElementById('stepTrackToggle');
+    const icon = document.getElementById('stepTrackToggleIcon');
+    if (!btn) return;
+
+    const on = _isStepTrackOn();
+    icon.textContent = on ? '🟢' : '⚫';
+    btn.title = on ? 'Step tracking ON — tap to disable' : 'Step tracking OFF — tap to enable';
+
+    btn.onclick = () => {
+      const nowOn = !_isStepTrackOn();
+      _setStepTrack(nowOn);
+      icon.textContent = nowOn ? '🟢' : '⚫';
+      btn.title = nowOn ? 'Step tracking ON — tap to disable' : 'Step tracking OFF — tap to enable';
+
+      if (nowOn) {
+        Utils.showToast('🚶 Step tracking ON');
+        initStepsCard(); // start polling
+      } else {
+        Utils.showToast('Step tracking OFF');
+        // Stop polling
+        const card = document.getElementById('stepsCard');
+        if (card && card._liveInterval) { clearInterval(card._liveInterval); card._liveInterval = null; }
+        if (card) card.style.display = 'none';
+      }
+    };
+  };
+
   const init = () => {
     render();
+    _initStepToggle();
     Router.on('home', () => {
-      closeSheet(); // clean up any open sheet before re-render
+      closeSheet();
       render();
+      _initStepToggle(); // re-wire after re-render
     });
   };
 
@@ -481,70 +529,109 @@ const HomeScreen = (() => {
   const initStepsCard = async () => {
     const card = document.getElementById('stepsCard');
 
-    // Always update steps strip value (even if card hidden)
+    // Always refresh strip count
     await _refreshStepsStrip();
 
     if (!card) return;
 
-    const st = window.UserData ? UserData.getState() : {};
-    const workoutOn = !!(st.userProfile && st.userProfile.workoutToday);
+    const isAndroid = window.StepTracker && StepTracker.isAndroid();
 
-    if (!workoutOn) {
+    if (!isAndroid) {
       card.style.display = 'none';
       return;
     }
 
-    // Workout mode is ON — show the card
-    card.style.display = 'block';
-
-    const isAndroid = window.StepTracker && StepTracker.isAndroid();
-    const subEl     = document.getElementById('stepsCardSub');
-    const refreshBtn = document.getElementById('stepsRefreshBtn');
-
-    if (!isAndroid) {
-      if (subEl)      subEl.textContent = 'Step tracking requires Android + Health Connect';
-      if (refreshBtn) refreshBtn.style.display = 'none';
-      const countEl = document.getElementById('stepsCardCount');
-      const lossEl  = document.getElementById('stepsLossLabel');
-      const barEl   = document.getElementById('stepsBar');
-      if (countEl) countEl.textContent = '—';
-      if (lossEl)  lossEl.textContent  = 'Open on Android to enable step tracking';
-      if (barEl)   barEl.style.width   = '0%';
+    // Respect the toggle — if OFF, hide card and don't start polling
+    if (!_isStepTrackOn()) {
+      card.style.display = 'none';
       return;
     }
 
-    // Android: request Health Connect permission the FIRST time workout mode is turned on
+    // Toggle is ON — show card and start tracking
+    card.style.display = 'block';
+
+    const subEl     = document.getElementById('stepsCardSub');
+    const refreshBtn = document.getElementById('stepsRefreshBtn');
+
+    // Auto-request Health Connect permission silently on first load
     if (!StepTracker.hasPermission()) {
-      if (subEl) subEl.textContent = 'Requesting Health Connect access…';
+      if (subEl) subEl.textContent = 'Connecting to Health Connect…';
       const granted = await StepTracker.requestPermission();
-      if (granted) {
-        if (subEl) subEl.textContent = '✅ Health Connect connected!';
-      } else {
-        if (subEl) subEl.textContent = 'Permission denied — tap Sync to retry';
+      if (!granted) {
+        if (subEl) subEl.textContent = 'Tap Sync to enable step tracking';
       }
     }
 
-    await updateStepsDisplay();
+    // Initial sync
+    await _syncStepsAndLogWater();
 
-    // Prevent duplicate listeners
-    const btn = document.getElementById('stepsRefreshBtn');
-    if (btn && !btn._stepsBound) {
-      btn._stepsBound = true;
-      btn.addEventListener('click', async () => {
+    // Live polling every 60s — syncs steps and logs water loss automatically
+    if (card._liveInterval) clearInterval(card._liveInterval);
+    card._liveInterval = setInterval(() => _syncStepsAndLogWater(), 60000);
+
+    // Manual sync button
+    if (refreshBtn && !refreshBtn._bound) {
+      refreshBtn._bound = true;
+      refreshBtn.addEventListener('click', async () => {
         if (subEl) subEl.textContent = 'Syncing…';
-        if (!StepTracker.hasPermission()) {
-          const granted = await StepTracker.requestPermission();
-          if (!granted) {
-            if (subEl) subEl.textContent = 'Permission denied — grant in Health Connect settings';
-            return;
-          }
-        }
-        await updateStepsDisplay();
+        await _syncStepsAndLogWater();
       });
     }
   };
 
-  // Refresh the strip count without showing the full card
+
+  // Sync steps, calc water loss by formula, log difference as consumed water
+  const _syncStepsAndLogWater = async () => {
+    if (!window.StepTracker) return;
+    const steps = await StepTracker.sync();
+
+    const countEl = document.getElementById('stepsCardCount');
+    const subEl   = document.getElementById('stepsCardSub');
+    const lossEl  = document.getElementById('stepsLossLabel');
+    const barEl   = document.getElementById('stepsBar');
+    const stripEl = document.getElementById('homeStepsVal');
+
+    if (countEl) countEl.textContent = steps.toLocaleString();
+    if (stripEl) stripEl.textContent = steps >= 1000 ? (steps/1000).toFixed(1)+'k' : (steps > 0 ? String(steps) : '—');
+
+    // Get weather for dynamic calc
+    let temp = 22, humidity = 50;
+    try { const w = window._lastWeather||{}; temp=w.temp||w.temperature||22; humidity=w.humidity||50; } catch(e){}
+
+    const totalLoss = StepTracker.calcHydrationLoss(steps, temp, humidity);
+
+    // Step bar (10k steps = 100%)
+    if (barEl) barEl.style.width = Math.min(100, (steps/10000)*100) + '%';
+
+    // Loss label with colour coding
+    const lossColor = totalLoss > 1000 ? '#f87171' : totalLoss > 500 ? '#fb923c' : '#4ade80';
+    if (lossEl) {
+      lossEl.textContent = totalLoss > 0
+        ? `💧 ~${totalLoss} ml water loss from ${steps.toLocaleString()} steps`
+        : 'Walk more to see hydration impact';
+      lossEl.style.color = lossColor;
+    }
+    if (subEl) subEl.textContent = '🟢 Live — updates every minute';
+
+    // Log only the NEW loss since last sync
+    const today = new Date().toISOString().slice(0,10);
+    const lastDate  = localStorage.getItem('wt_steps_log_date') || '';
+    const lastLoss  = lastDate === today ? parseInt(localStorage.getItem('wt_steps_loss_today')||'0') : 0;
+    const lastSteps = lastDate === today ? parseInt(localStorage.getItem('wt_steps_logged_today')||'0') : 0;
+    const newLoss = Math.max(0, totalLoss - lastLoss);
+
+    if (newLoss >= 10 && steps > lastSteps && window.Storage) {
+      try {
+        await Storage.addEntry(newLoss, today);
+        localStorage.setItem('wt_steps_logged_today', String(steps));
+        localStorage.setItem('wt_steps_loss_today', String(totalLoss));
+        localStorage.setItem('wt_steps_log_date', today);
+        console.log('[Steps] Logged', newLoss, 'ml from', steps, 'steps (temp:', temp, '°C)');
+        await updateUI();
+      } catch(e) { console.warn('[Steps] log failed:', e.message); }
+    }
+  };
+
   const _refreshStepsStrip = async () => {
     const stepVal = document.getElementById('homeStepsVal');
     if (!stepVal) return;
@@ -555,38 +642,8 @@ const HomeScreen = (() => {
       : '—';
   };
 
-  const updateStepsDisplay = async () => {
-    if (!window.StepTracker) return;
-    const steps = await StepTracker.sync();
-    const stepVal = document.getElementById('homeStepsVal');
-    if (stepVal) stepVal.textContent = steps > 0
-      ? (steps >= 1000 ? (steps/1000).toFixed(1)+'k' : String(steps))
-      : '—';
-    const countEl = document.getElementById('stepsCardCount');
-    const subEl   = document.getElementById('stepsCardSub');
-    const lossEl  = document.getElementById('stepsLossLabel');
-    const barEl   = document.getElementById('stepsBar');
-    if (countEl) countEl.textContent = steps.toLocaleString();
-    let temp = 22, humidity = 50;
-    try {
-      const w = window.Weather ? await Weather.fetch() : null;
-      if (w) { temp = w.temp; humidity = w.humidity; }
-    } catch(e) {}
-    const lossml = StepTracker.calcHydrationLoss(steps, temp, humidity);
-    const goal = 10000;
-    const pct = Math.min(100, Math.round((steps / goal) * 100));
-    if (subEl) subEl.textContent = steps.toLocaleString() + ' of 10,000 steps (' + pct + '%)';
-    if (barEl) barEl.style.width = pct + '%';
-    if (lossEl) {
-      if (lossml > 0) {
-        lossEl.textContent = '~' + lossml + ' ml hydration lost to activity';
-        lossEl.style.color = lossml > 500 ? '#ff7043' : lossml > 200 ? '#ffb74d' : '#81c784';
-      } else {
-        lossEl.textContent = 'No significant hydration loss yet';
-        lossEl.style.color = '#81c784';
-      }
-    }
-  };
+  const updateStepsDisplay = _syncStepsAndLogWater; // alias
+
 
   return { init, updateUI, updateStepsDisplay };
 })();

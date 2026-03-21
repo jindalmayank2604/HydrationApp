@@ -688,3 +688,73 @@ body.dark-mode .an-pro-report-banner {
   color: #a78bfa;
   font-size: 13px;
 }
+
+/* ── Calendar year prev/next buttons ── */
+.dob-year-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.dob-year-val {
+  font-size: 14px;
+  font-weight: 700;
+  color: #E3E3E8;
+  min-width: 38px;
+  text-align: center;
+}
+.dob-year-btn {
+  background: rgba(139,92,246,0.15);
+  border: 1px solid rgba(139,92,246,0.3);
+  border-radius: 6px;
+  color: #a78bfa;
+  font-size: 16px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  touch-action: manipulation;
+}
+.dob-year-btn:hover { background: rgba(139,92,246,0.3); }
+
+/* ══════════════════════════════════════════
+   STYLED SELECT — Light mode overrides
+   ══════════════════════════════════════════ */
+body:not(.dark-mode) .styled-select-btn {
+  background: #fff;
+  border: 1.5px solid rgba(0,0,0,0.15);
+  color: #202124;
+}
+body:not(.dark-mode) .styled-select-btn:hover {
+  background: #f8f9fa;
+  border-color: #1A73E8;
+}
+body:not(.dark-mode) .styled-select-btn.is-active {
+  background: #f0f4ff;
+  border-color: #1A73E8;
+  box-shadow: 0 0 0 3px rgba(26,115,232,0.12);
+}
+body:not(.dark-mode) .styled-select-arrow {
+  color: #5F6368;
+}
+body:not(.dark-mode) .styled-select-btn.is-active .styled-select-arrow {
+  color: #1A73E8;
+}
+body:not(.dark-mode) .styled-select-dropdown {
+  background: #fff;
+  border: 1.5px solid rgba(0,0,0,0.12);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+}
+body:not(.dark-mode) .styled-select-opt {
+  color: #202124;
+}
+body:not(.dark-mode) .styled-select-opt:hover {
+  background: rgba(26,115,232,0.08);
+  color: #1A73E8;
+}
+body:not(.dark-mode) .styled-select-opt.is-sel {
+  background: rgba(26,115,232,0.12);
+  color: #1A73E8;
+}
