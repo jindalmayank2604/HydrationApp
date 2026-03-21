@@ -6,7 +6,7 @@
    Rate limits are enforced client-side for instant UX feedback.
 
    Role limits:
-     user   → 6 scans / day    (resets at midnight)
+     user   → 2 scans / day    (resets at midnight)
      pro    → 450 scans / month (resets on 1st of month)
      admin  → unlimited
      maggie → unlimited
@@ -15,7 +15,7 @@
 const TokenManager = (() => {
 
   const LIMITS = {
-    user   : { max: 6,   period: 'daily'   },
+    user   : { max: 2,   period: 'daily'   },
     pro    : { max: 450, period: 'monthly' },
     admin  : { max: Infinity, period: null },
     maggie : { max: Infinity, period: null },

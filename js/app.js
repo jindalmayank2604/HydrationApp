@@ -3,27 +3,128 @@
    ══════════════════════════════════════════ */
 
 const App = (() => {
+  /* ── Advanced Navigation (orbit menu + desktop collapse) ── */
+  const _setupAdvancedNavigation = () => {
+    // ── Desktop sidebar toggle ──
+    const desktopToggle = document.getElementById('desktopNavToggle');
+    if (desktopToggle) {
+      desktopToggle.addEventListener('click', () => {
+        document.body.classList.toggle('nav-expanded');
+        const isExpanded = document.body.classList.contains('nav-expanded');
+        desktopToggle.setAttribute('aria-label', isExpanded ? 'Collapse sidebar' : 'Expand sidebar');
+        localStorage.setItem('wt_nav_expanded', isExpanded);
+      });
+      // Restore expanded state
+      if (localStorage.getItem('wt_nav_expanded') === 'true') {
+        document.body.classList.add('nav-expanded');
+      }
+    }
+
+    // ── Mobile orbit nav ──
+    const orbitNav      = document.getElementById('mobileOrbitNav');
+    const orbitTrigger  = document.getElementById('orbitTrigger');
+    const orbitBackdrop = document.getElementById('orbitBackdrop');
+    if (!orbitNav || !orbitTrigger) return;
+
+    let orbitOpen = false;
+
+    const openOrbit = () => {
+      orbitOpen = true;
+      orbitNav.classList.add('open');
+      if (orbitBackdrop) orbitBackdrop.classList.add('active');
+      orbitTrigger.setAttribute('aria-expanded', 'true');
+      if (navigator.vibrate) navigator.vibrate(8);
+    };
+
+    const closeOrbit = () => {
+      orbitOpen = false;
+      orbitNav.classList.remove('open');
+      if (orbitBackdrop) orbitBackdrop.classList.remove('active');
+      orbitTrigger.setAttribute('aria-expanded', 'false');
+    };
+
+    orbitTrigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      orbitOpen ? closeOrbit() : openOrbit();
+    });
+
+    // Item navigation
+    orbitNav.querySelectorAll('.mobile-orbit-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const screen = btn.dataset.screen;
+        if (screen) {
+          closeOrbit();
+          setTimeout(() => Router.navigate(screen), 60);
+        }
+      });
+    });
+
+    // Backdrop + escape close
+    if (orbitBackdrop) orbitBackdrop.addEventListener('click', closeOrbit);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && orbitOpen) closeOrbit(); });
+
+    // Sync active state on every navigate
+    const _syncOrbit = () => {
+      const current = Router.getCurrent();
+      orbitNav.querySelectorAll('.mobile-orbit-item').forEach(btn => {
+        btn.classList.toggle('orbit-active', btn.dataset.screen === current);
+      });
+      if (orbitOpen) closeOrbit();
+    };
+    ['home','history','analytics','achievements','reminder','settings','shop'].forEach(s => {
+      Router.on(s, _syncOrbit);
+    });
+    _syncOrbit();
+  };
 
   /* ── Update header avatar from session ── */
   const _updateHeaderAvatar = (session) => {
-    const el   = Utils.el('headerAvatar');
+    const el = Utils.el('headerAvatar');
     if (!el) return;
     const name = session?.displayName || session?.email?.split('@')[0] || '';
     const url  = session?.photoURL || null;
-    if (url) {
-      // Show profile photo
+
+    // Use Frames.avatarWithFrame so equipped frame shows on header
+    if (window.Frames) {
+      const revision = session?.photoVersion || session?.savedAt || null;
+      const size = 40; // .header-avatar is always 40px
       el.style.background = 'transparent';
       el.style.fontSize   = '0';
-      el.innerHTML = `<img src="${url}"
-        style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;"
-        onerror="this.parentElement.innerHTML='${name.charAt(0).toUpperCase() || '💧'}';this.parentElement.style.fontSize='18px';this.parentElement.style.background='var(--md-primary-light)';"
-      />`;
+      el.style.overflow   = 'visible';
+      el.innerHTML = Frames.avatarWithFrame(url, name, size, null, revision);
     } else {
-      // No photo — always show the 💧 dewdrop (original default)
-      el.style.background = 'var(--md-primary-light)';
-      el.style.fontSize   = '20px';
-      el.innerHTML        = '💧';
+      const src = window.Profile?.resolveImageSrc
+        ? Profile.resolveImageSrc(url, session?.photoVersion || session?.savedAt || null)
+        : url;
+      if (src) {
+        el.style.background = 'transparent';
+        el.style.fontSize   = '0';
+        el.innerHTML = `<img src="${src}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;"
+          onerror="this.parentElement.innerHTML='${name.charAt(0).toUpperCase()||'💧'}';this.parentElement.style.fontSize='18px';" />`;
+      } else {
+        el.style.background = 'var(--md-primary-light)';
+        el.style.fontSize   = '20px';
+        el.innerHTML        = '💧';
+      }
     }
+  };
+
+
+  /* ── Coin chip click → shop ── */
+  const _initCoinChip = () => {
+    const chip = Utils.el('headerCoinChip');
+    if (!chip) return;
+    chip.style.cursor = 'pointer';
+    chip.addEventListener('click', () => Router.navigate('shop'));
+    chip.title = 'View Shop';
+  };
+
+  /* ── Sync coin balance to header chip ── */
+  const _syncHeaderCoins = () => {
+    const el = Utils.el('headerCoinValue');
+    if (!el) return;
+    const coins = window.UserData ? UserData.getState().coinBalance || 0 : 0;
+    el.textContent = coins;
   };
 
   /* ── Update header date + weather temperature ── */
@@ -116,6 +217,7 @@ const App = (() => {
             const patch = {};
             if (d.displayName) patch.displayName = d.displayName;
             if (d.photoURL)    patch.photoURL    = d.photoURL;
+            if (d.photoVersion) patch.photoVersion = d.photoVersion;
             if (Object.keys(patch).length) {
               const latestSession = Auth.getSession();
               if (latestSession) {
@@ -147,10 +249,6 @@ const App = (() => {
     // Render profile photo in header
     _updateHeaderAvatar(session);
 
-    if (Router.getCurrent() === 'settings') {
-      SettingsScreen.renderForRole();
-    }
-
     // Check if survey was done on another device — if not, show it now
     if (window.SurveyScreen && !SurveyScreen.isDoneLocally()) {
       const donOnOtherDevice = await SurveyScreen.checkAfterLogin(session.uid);
@@ -163,6 +261,41 @@ const App = (() => {
         }, session.uid);
       }
     }
+
+    if (window.UserData) {
+      await UserData.initForSession();
+    }
+
+    // Re-render whatever screen is currently active with fresh Firestore data
+    const _currentScreen = Router.getCurrent();
+    if (_currentScreen === 'settings' && window.SettingsScreen) {
+      SettingsScreen.renderForRole();
+    } else if (_currentScreen === 'home' && window.HomeScreen) {
+      HomeScreen.updateUI();
+    }
+
+    // Load frame catalog from Firestore so frames are ready everywhere
+    if (window.Frames) {
+      Frames.loadCatalog().catch(() => {});
+    }
+
+    /* ── DEV ONLY: temporary 999-coin grant for admin testing ──
+       THIS BLOCK IS LOCALHOST-ONLY. It will never run on GitHub Pages
+       or any deployed URL because of the hostname check.
+       Delete this entire block before going to production.
+    ── */
+    if (
+      window.UserData &&
+      Auth.isAdmin() &&
+      (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+    ) {
+      const _devState = UserData.getState();
+      if ((_devState.coinBalance || 0) < 999) {
+        await UserData.save({ coinBalance: 999 });
+        console.warn('[DEV] 🪙 Admin test balance set to 999 coins — localhost only, delete before deploy');
+      }
+    }
+    /* ── END DEV BLOCK ── */
 
     // Sync shared drinks from Firestore for ALL users
     Drinks.syncFromFirestore().catch(() => {});
@@ -180,8 +313,33 @@ const App = (() => {
       }, 3000);
     }
 
+    // Sync coin balance to header
+    _syncHeaderCoins();
+    // Subscribe to UserData changes to keep coin chip + avatar live
+    if (window.UserData) {
+      UserData.subscribe(_syncHeaderCoins);
+      // Re-render header avatar whenever equippedFrame changes
+      UserData.subscribe((state) => {
+        const session = window.Auth?.getSession?.();
+        if (session) _updateHeaderAvatar(session);
+        // Re-render settings if it's the current route (active or not — data just loaded)
+        if (window.SettingsScreen && window.Router) {
+          if (Router.getCurrent() === 'settings') {
+            SettingsScreen.renderForRole?.();
+          } else {
+            SettingsScreen._patchMetaLine?.();
+          }
+        }
+      });
+    }
+
     // Update weather in header after login (geolocation may now be permitted)
     _updateHeaderDate();
+
+    // Handle pending family join (from invite link before login)
+    const pendingJoin = localStorage.getItem('wt_pending_family_join');
+    if (pendingJoin) { localStorage.removeItem('wt_pending_family_join'); _handleFamilyInvite(); }
+    _handleFamilyInvite();
 
     // Weather-based smart goal popup (non-blocking, only before noon, once per day)
     if (window.WeatherGoal) WeatherGoal.tryShow().catch(() => {});
@@ -192,17 +350,50 @@ const App = (() => {
     Utils.showToast(isAdmin ? '🔑 Admin access granted' : '👋 Welcome back!');
   };
 
+  /* ── Handle family invite links (?joinFamily=ownerUid) ── */
+  const _handleFamilyInvite = async () => {
+    const params = new URLSearchParams(window.location.search);
+    const ownerUid = params.get('joinFamily');
+    if (!ownerUid) return;
+    // Clean URL
+    window.history.replaceState({}, '', window.location.pathname);
+    // Wait for auth
+    const session = Auth.getSession();
+    if (!session) {
+      localStorage.setItem('wt_pending_family_join', ownerUid);
+      return;
+    }
+    try {
+      const db = firebase.firestore();
+      const ownerDoc = await db.collection('users').doc(ownerUid).get();
+      if (!ownerDoc.exists) { Utils.showToast('⚠️ Invalid family link.'); return; }
+      const ownerEmail = ownerDoc.data()?.email || ownerUid;
+      // Add current user's email to owner's familyMembers in Firestore
+      await db.collection('users').doc(ownerUid).update({
+        familyMembers: firebase.firestore.FieldValue.arrayUnion(session.email)
+      });
+      Utils.showToast(`✅ You joined ${ownerEmail.split('@')[0]}'s family group!`);
+    } catch (e) {
+      console.warn('[App] Family join failed:', e.message);
+      Utils.showToast('Could not join family: ' + e.message);
+    }
+  };
+
   /* ── Main init ── */
   const init = async () => {
     _updateHeaderDate();
+    _setupAdvancedNavigation();
 
     // Init all screens
+    _initCoinChip();
     Router.init();
     HomeScreen.init();
     HistoryScreen.init();
     AnalyticsScreen.init();
+    AchievementsScreen.init();
     ReminderScreen.init();
     SettingsScreen.init();
+    ShopScreen.init();
 
     const session = Auth.getSession();
 

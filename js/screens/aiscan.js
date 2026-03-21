@@ -1116,9 +1116,15 @@ const analyseColour = (imgElement) => {
       y: Math.max(MARGIN, Math.min(window.innerHeight - SIZE - MARGIN, y)),
     });
 
-    const navH   = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--nav-height') || '68');
-    const sideW  = window.innerWidth >= 1024 ? 260 : 0;
-    const defPos = clamp(sideW + MARGIN, window.innerHeight - SIZE - navH - MARGIN - 8);
+    const sideW  = window.innerWidth >= 1024 ? (document.body.classList.contains('nav-collapsed') ? 64 : 240) : 0;
+    // Default: top-right corner on mobile (clear of orbit at bottom), right side on desktop
+    let defPos;
+    if (window.innerWidth < 1024) {
+      // Mobile: upper-right, below header
+      defPos = clamp(window.innerWidth - SIZE - MARGIN, 80);
+    } else {
+      defPos = clamp(sideW + MARGIN, window.innerHeight - SIZE - MARGIN - 8);
+    }
     const pos    = clamp((loadPos() || defPos).x, (loadPos() || defPos).y);
 
     const fab = document.createElement('button');
@@ -1157,6 +1163,46 @@ const analyseColour = (imgElement) => {
     });
 
     document.body.appendChild(fab);
+
+    /* ── Idle fade: after 20s of no interaction, FAB fades to 8% opacity ── */
+    let _fabIdleTimer = null;
+    const FAB_IDLE_OPACITY = '0.08';
+    const FAB_ACTIVE_OPACITY = '1';
+    const FAB_IDLE_DELAY = 20000;
+
+    const resetFabIdle = () => {
+      fab.style.opacity = FAB_ACTIVE_OPACITY;
+      fab.style.transition = 'opacity 0.4s ease';
+      clearTimeout(_fabIdleTimer);
+      _fabIdleTimer = setTimeout(() => {
+        fab.style.opacity = FAB_IDLE_OPACITY;
+        fab.style.transition = 'opacity 1.5s ease';
+      }, FAB_IDLE_DELAY);
+    };
+
+    // Start idle timer immediately
+    resetFabIdle();
+
+    // Reset on any user interaction with the page
+    ['pointerdown','pointermove','keydown','scroll','touchstart'].forEach(evt => {
+      document.addEventListener(evt, resetFabIdle, { passive: true });
+    });
+
+    // Hide FAB when orbit nav is open (avoid overlap)
+    const orbitNav = document.getElementById('mobileOrbitNav');
+    if (orbitNav) {
+      const _orbitObserver = new MutationObserver(() => {
+        if (orbitNav.classList.contains('open')) {
+          fab.style.opacity = '0';
+          fab.style.pointerEvents = 'none';
+          fab.style.transition = 'opacity 0.2s ease';
+        } else {
+          fab.style.pointerEvents = '';
+          resetFabIdle();
+        }
+      });
+      _orbitObserver.observe(orbitNav, { attributes: true, attributeFilter: ['class'] });
+    }
 
     /* ── Drag / tap state ── */
     let dragging = false, moved = false;
@@ -1845,7 +1891,7 @@ const analyseColour = (imgElement) => {
     /* ── Token / rate-limit check ─────────────────────────────
        Checks role limits before calling the backend.
        Admin + Maggie pass through immediately.
-       User (6/day) and Pro (450/month) are enforced here.
+       User (2/day) and Pro (450/month) are enforced here.
        ──────────────────────────────────────────────────────── */
     if (window.TokenManager) {
       try {
@@ -1882,7 +1928,7 @@ const analyseColour = (imgElement) => {
                       display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">✨</div>
                     <div>
                       <div style="font-size:13px;font-weight:600;color:var(--md-on-background);">450 AI scans / month</div>
-                      <div style="font-size:11px;color:var(--md-on-surface-low);">vs 6 scans/day on free</div>
+                      <div style="font-size:11px;color:var(--md-on-surface-low);">vs 2 scans/day on free</div>
                     </div>
                     <div style="margin-left:auto;font-size:11px;font-weight:700;color:#FBBC04;">PRO</div>
                   </div>

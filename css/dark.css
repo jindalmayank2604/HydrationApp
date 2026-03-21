@@ -122,3 +122,97 @@ body.dark-mode .pw-toggle-btn { color: #8A8F9A; }
 body.dark-mode .login-divider { color: #44495A; }
 body.dark-mode .login-divider::before,
 body.dark-mode .login-divider::after { background: #44495A; }
+
+/* ══════════════════════════════════════════════════════════
+   DARK MODE — Achievements, Shop, Orbit Nav
+   ══════════════════════════════════════════════════════════ */
+
+/* Achievement hero — keep gradient but darken */
+body.dark-mode .achievement-hero {
+  background: linear-gradient(135deg, #031830, #0d3a6e 55%, #1a5296);
+}
+body.dark-mode .shop-hero {
+  background: linear-gradient(135deg, #1a0e00, #7a3d00 52%, #c87000);
+}
+body.dark-mode .settings-shell {
+  background: linear-gradient(135deg, #051a18, #145550 50%, #1d7a76);
+}
+
+/* Coin card glassmorphism in dark */
+body.dark-mode .achievement-coin-card {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+body.dark-mode .achievement-coin-card__label,
+body.dark-mode .achievement-coin-card__meta { color: rgba(255,255,255,0.7); }
+body.dark-mode .achievement-coin-card__value { color: #fff; }
+
+/* Achievement nodes */
+body.dark-mode .achievement-node {
+  background: #1E2128;
+  border-color: #33383F;
+  color: #E3E3E8;
+}
+body.dark-mode .achievement-node__day { color: #E3E3E8; }
+body.dark-mode .achievement-node__coin,
+body.dark-mode .achievement-node__status { color: #8A8F9A; }
+
+body.dark-mode .achievement-node.is-unlocked {
+  background: linear-gradient(180deg, rgba(26,115,232,0.2), rgba(26,115,232,0.07));
+  border-color: rgba(100,181,246,0.45);
+}
+body.dark-mode .achievement-node.is-unlocked .achievement-node__status {
+  color: #64B5F6;
+}
+body.dark-mode .achievement-node.is-claimed {
+  background: linear-gradient(180deg, rgba(52,168,83,0.2), rgba(52,168,83,0.06));
+  border-color: rgba(52,168,83,0.45);
+}
+body.dark-mode .achievement-node.is-claimed .achievement-node__status { color: #66BB6A; }
+
+/* Progress bar track */
+body.dark-mode .achievement-progress-bar { background: #282D36; }
+body.dark-mode .achievement-progress-card__badge {
+  background: radial-gradient(circle at top, #1e5c9e, #0d3a72);
+}
+
+/* Tip cards */
+body.dark-mode .achievement-tip-card { background: #1E2128; }
+body.dark-mode .achievement-tip-card--soft {
+  background: linear-gradient(145deg, rgba(255,183,3,0.08), rgba(255,183,3,0.02));
+}
+body.dark-mode .achievement-tip-card__metric { color: #E3E3E8; }
+
+/* Shop placeholder cards */
+body.dark-mode .shop-placeholder-card { background: #1E2128; border-color: #33383F; }
+body.dark-mode .shop-placeholder-card__title { color: #E3E3E8; }
+body.dark-mode .shop-placeholder-card__sub { color: #8A8F9A; }
+body.dark-mode .shop-hero__coins { color: #fff; }
+
+/* Orbit nav dark */
+body.dark-mode .mobile-orbit-item {
+  background: #1E2128;
+  color: #64B5F6;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+}
+body.dark-mode .mobile-orbit-item .mobile-orbit-label { color: #8A8F9A; }
+body.dark-mode .mobile-orbit-item:hover {
+  background: #1A3A6E;
+  color: #90CAF9;
+}
+body.dark-mode .mobile-orbit-item.orbit-active {
+  background: #1A3A6E;
+  color: #64B5F6;
+}
+
+/* Desktop nav toggle in dark */
+body.dark-mode .desktop-nav-toggle span { background: #8A8F9A; }
+body.dark-mode .desktop-nav-toggle:hover { background: #282D36; }
+
+/* Settings custom inputs dark */
+body.dark-mode .custom-select-wrap::after { color: #8A8F9A; }
+body.dark-mode .md-input[type="number"] { background: #282D36; border-color: #44495A; color: #E3E3E8; }
+
+/* Toggle switch dark */
+body.dark-mode .toggle-track { background: #33383F; }
+body.dark-mode .toggle-input:checked + .toggle-track { background: #1A73E8; }

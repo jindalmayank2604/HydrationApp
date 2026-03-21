@@ -9,7 +9,15 @@
   padding: var(--space-lg);
   box-shadow: var(--shadow-1);
   transition: box-shadow var(--dur-short) var(--ease-standard);
-  position: relative; overflow: hidden;
+  position: relative; overflow: hidden; /* individual tiles can override with overflow:visible */
+}
+/* Frame shop needs overflow visible so frame images can bleed outside their cards */
+#frameShopSection,
+#frameShopSection *:not(img):not([style*="border-radius:50%"]) {
+  overflow: visible !important;
+}
+#frameShopSection [style*="border-radius:50%"] {
+  overflow: hidden !important;
 }
 .tile:hover { box-shadow: var(--shadow-2); }
 

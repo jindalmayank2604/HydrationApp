@@ -88,6 +88,7 @@ const Auth = (() => {
       email: user.email,
       displayName: user.displayName,
       photoURL: user.photoURL,
+      photoVersion: user.photoVersion || null,
       uid: user.uid,
       role: user.role || null,
       savedAt: Date.now(),
@@ -156,6 +157,7 @@ const Auth = (() => {
     // Prefer Firestore-saved displayName/photoURL (user may have changed them)
     let finalDisplayName = user.displayName;
     let finalPhotoURL    = user.photoURL;
+    let finalPhotoVersion = null;
     try {
       const db      = firebase.firestore();
       const userDoc = await db.collection('users').doc(user.uid).get();
@@ -163,6 +165,7 @@ const Auth = (() => {
         const d = userDoc.data();
         if (d.displayName) finalDisplayName = d.displayName;
         if (d.photoURL)    finalPhotoURL    = d.photoURL;
+        if (d.photoVersion) finalPhotoVersion = d.photoVersion;
       }
     } catch (e) { /* non-fatal */ }
 
@@ -174,6 +177,7 @@ const Auth = (() => {
       email: user.email,
       displayName: finalDisplayName,
       photoURL: finalPhotoURL,
+      photoVersion: finalPhotoVersion,
       uid: user.uid,
       role: effectiveGoogleRole,
     }, rememberMe);
@@ -217,6 +221,7 @@ const Auth = (() => {
     // so profile changes persist across logout/login
     let displayName = user.displayName || email.split('@')[0];
     let photoURL    = null;
+    let photoVersion = null;
     try {
       const db      = firebase.firestore();
       const userDoc = await db.collection('users').doc(user.uid).get();
@@ -224,6 +229,7 @@ const Auth = (() => {
         const d = userDoc.data();
         if (d.displayName) displayName = d.displayName;
         if (d.photoURL)    photoURL    = d.photoURL;
+        if (d.photoVersion) photoVersion = d.photoVersion;
       }
     } catch (e) { console.warn('[Auth] Could not load profile from Firestore:', e.message); }
 
@@ -235,6 +241,7 @@ const Auth = (() => {
       email: user.email,
       displayName,
       photoURL,
+      photoVersion,
       uid: user.uid,
       role: effectiveRole,
     }, rememberMe);
@@ -274,6 +281,7 @@ const Auth = (() => {
       // Try to restore saved displayName + photoURL from Firestore
       let displayName = pendingEmail.split('@')[0];
       let photoURL    = null;
+      let photoVersion = null;
       try {
         const db      = firebase.firestore();
         const userDoc = await db.collection('users').doc(safeUid).get();
@@ -281,6 +289,7 @@ const Auth = (() => {
           const d = userDoc.data();
           if (d.displayName) displayName = d.displayName;
           if (d.photoURL)    photoURL    = d.photoURL;
+          if (d.photoVersion) photoVersion = d.photoVersion;
         }
       } catch (e) { /* non-fatal */ }
       const emailLow = pendingEmail.toLowerCase().trim();
@@ -289,6 +298,7 @@ const Auth = (() => {
         email: pendingEmail,
         displayName,
         photoURL,
+        photoVersion,
         uid: safeUid,
         role: effectiveRole,
       }, rememberMe);

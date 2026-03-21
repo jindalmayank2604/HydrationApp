@@ -192,6 +192,8 @@ const HistoryScreen = (() => {
         Utils.showToast('⚠️ Maximum is 9999 ml per day'); return;
       }
       await Storage.setTotalForDate(dateStr, newVal);
+      if (window.UserData) await UserData.recomputeProgress();
+      if (window.Leaderboard && Firebase.getUserId()) Leaderboard.publishStreak(Firebase.getUserId()).catch(() => {});
       markedDatesCache = new Set(await Storage.getAllDates());
       renderCalendar();
       await showDataFor(dateStr);
@@ -203,6 +205,8 @@ const HistoryScreen = (() => {
       clearBtn.addEventListener('click', async () => {
         if (!confirm('Clear all water data for this day?')) return;
         await Storage.setTotalForDate(dateStr, 0);
+        if (window.UserData) await UserData.recomputeProgress();
+        if (window.Leaderboard && Firebase.getUserId()) Leaderboard.publishStreak(Firebase.getUserId()).catch(() => {});
         markedDatesCache = new Set(await Storage.getAllDates());
         renderCalendar();
         await showDataFor(dateStr);

@@ -132,10 +132,21 @@ const Leaderboard = (() => {
         }
       } catch (e) { /* non-fatal, use session values */ }
 
+      // Include equipped frame — read from localStorage (most up-to-date after equip)
+      let equippedFrame = null;
+      try {
+        const ls = JSON.parse(localStorage.getItem('wt_user_state_v2') || '{}');
+        equippedFrame = ls.equippedFrame || null;
+      } catch(e) {}
+      if (!equippedFrame && window.UserData) {
+        equippedFrame = UserData.getState().equippedFrame || null;
+      }
+
       await db().collection('leaderboard').doc(uid).set({
         displayName,
         email: session.email,
         photoURL,
+        equippedFrame,
         dailyStreak:   Math.min(Math.floor(daily),   365),
         monthlyStreak: Math.min(Math.floor(monthly), 31),
         goal:          Math.max(500, Math.min(goal, 10000)),

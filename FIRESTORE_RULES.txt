@@ -1,22 +1,220 @@
-════════════════════════════════════════════════
-PASTE THESE RULES IN FIREBASE CONSOLE:
-Firebase Console → Firestore → Rules tab
-════════════════════════════════════════════════
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Roles — readable by anyone signed in
-    match /Roles/{email} {
-      allow read: if request.auth != null;
+    // ─── HELPERS ───────────────────────────────────────────
+    function isAuthed()    { return request.auth != null; }
+    function isOwner(uid)  { return isAuthed() && request.auth.uid == uid; }
+    function isAdmin()     {
+      return isAuthed() && request.auth.token.email in [
+        'jindalmayank2604@gmail.com',
+        'mayankjindal2604@gmail.com'
+      ];
     }
 
-    // Water data — open for now (fix auth later)
-    match /users/{userId}/{document=**} {
-      allow read, write: if true;
+    // Water entry validation: amount 1-9999, date 10 chars, server timestamp, no extra fields
+    function validWaterEntry(data) {
+      return data.keys().hasAll(['amount','date','ts'])
+          && data.keys().hasOnly(['amount','date','ts'])
+          && data.amount is number
+          && data.amount >= 1
+          && data.amount <= 9999
+          && data.date is string
+          && data.date.size() == 10
+          && data.ts == request.time;
+    }
+
+    // Shared drinks doc
+    function validSharedDrinks(data) {
+      return data.keys().hasOnly(['drinks'])
+          && data.drinks is list;
+    }
+
+    // Custom drink validation
+    function validCustomDrink(data) {
+      return data.keys().hasAll(['name','emoji','hydration'])
+          && data.name is string && data.name.size() > 0 && data.name.size() <= 30
+          && data.emoji is string
+          && data.hydration is number && data.hydration >= -100 && data.hydration <= 100;
+    }
+
+    function validStringOrNull(value, maxLen) {
+      return value == null || (value is string && value.size() <= maxLen);
+    }
+
+    function validNumberOrNull(value, min, max) {
+      return value == null || (value is number && value >= min && value <= max);
+    }
+
+    function validAchievementState(data) {
+      return !('achievementState' in data)
+        || (
+          data.achievementState is map
+          && data.achievementState.keys().hasOnly([
+            'currentStreak',
+            'lastActiveDate',
+            'coinBalance',
+            'claimedMilestones',
+            'familyMembers',
+            'hydrationGoal',
+            'monthKey',
+            'freeTierUsage',
+            'userProfile'
+          ])
+          && data.achievementState.currentStreak is number
+          && data.achievementState.currentStreak >= 0
+          && data.achievementState.currentStreak <= 365
+          && validStringOrNull(data.achievementState.lastActiveDate, 10)
+          && data.achievementState.coinBalance is number
+          && data.achievementState.coinBalance >= 0
+          && data.achievementState.coinBalance <= 1000000
+          && data.achievementState.claimedMilestones is list
+          && data.achievementState.familyMembers is list
+          && data.achievementState.hydrationGoal is number
+          && data.achievementState.hydrationGoal >= 500
+          && data.achievementState.hydrationGoal <= 10000
+          && data.achievementState.monthKey is string
+          && data.achievementState.monthKey.size() == 7
+        );
+    }
+
+    function validProfileMeta(data) {
+      return !('profileMeta' in data)
+        || (
+          data.profileMeta is map
+          && validStringOrNull(data.profileMeta.username, 40)
+          && validStringOrNull(data.profileMeta.photoURL, 1000)
+          && validNumberOrNull(data.profileMeta.age, 0, 120)
+          && validNumberOrNull(data.profileMeta.height, 0, 300)
+          && validStringOrNull(data.profileMeta.gender, 20)
+          && validStringOrNull(data.profileMeta.workoutFrequency, 20)
+          && validStringOrNull(data.profileMeta.workoutIntensity, 20)
+        );
+    }
+
+    function validUserDoc(data) {
+      return (!('hydrationGoal' in data) || (data.hydrationGoal is number && data.hydrationGoal >= 500 && data.hydrationGoal <= 10000))
+        && (!('goal' in data) || (data.goal is number && data.goal >= 500 && data.goal <= 10000))
+        && (!('displayName' in data) || validStringOrNull(data.displayName, 40))
+        && (!('photoURL' in data) || validStringOrNull(data.photoURL, 1000))
+        && (!('email' in data) || validStringOrNull(data.email, 200))
+        && (!('surveyDone' in data) || data.surveyDone is bool)
+        && validAchievementState(data)
+        && validProfileMeta(data);
+    }
+
+    // ─── LEADERBOARD ANTI-CHEAT ────────────────────────────
+    // Cross-validates streak values against actual water_entries data.
+    //
+    // How it works:
+    //   - dailyStreak   must be <= 365  (1 year hard cap)
+    //   - monthlyStreak must be <= 31   (1 month hard cap)
+    //   - streak can only INCREASE by max 1 per write
+    //     (prevents jumping from 0 to 999 in one write)
+    //   - lastUpdated must be server timestamp (prevents backdating)
+    //   - goal must be >= 500ml (prevents 1ml goal exploit)
+    //   - flagged field must be boolean
+    //   - can only write your own doc (isOwner)
+    //
+    // Note: full cross-validation against water_entries would require
+    // Cloud Functions. These rules close the most common attack vectors.
+
+    function validLeaderboardWrite(uid, data) {
+      let existing = resource != null ? resource.data : null;
+      let prevDaily   = existing != null ? existing.dailyStreak   : 0;
+      let prevMonthly = existing != null ? existing.monthlyStreak : 0;
+      let isNewDoc    = existing == null;
+
+      return
+        // Required fields present
+        data.keys().hasAll(['dailyStreak','monthlyStreak','lastUpdated','flagged','goal','email'])
+
+        // Server timestamp — prevents backdating
+        && data.lastUpdated == request.time
+
+        // Hard caps
+        && data.dailyStreak   is int && data.dailyStreak   >= 0 && data.dailyStreak   <= 365
+        && data.monthlyStreak is int && data.monthlyStreak >= 0 && data.monthlyStreak <= 31
+
+        // Rate-of-change cap: streak can only go up by 1 per write
+        // (a legitimate streak increments by 1 day at a time)
+        && (isNewDoc || data.dailyStreak   <= prevDaily   + 1)
+        && (isNewDoc || data.monthlyStreak <= prevMonthly + 1)
+
+        // Goal must be realistic (prevents 1ml exploit)
+        && data.goal is number && data.goal >= 500 && data.goal <= 10000
+
+        // Flagged must be boolean
+        && data.flagged is bool
+
+        // Email must match auth token (prevents impersonation)
+        && data.email == request.auth.token.email
+
+        // Owner only
+        && isOwner(uid);
+    }
+
+    // ─── ROLES ─────────────────────────────────────────────
+    match /Roles/{email} {
+      allow get:    if isAuthed();
+      allow list:   if false;
+      allow create: if isAuthed() && request.auth.token.email.lower() == email.lower();
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // ─── USER DATA ──────────────────────────────────────────
+    match /users/{uid}/water_entries/{entryId} {
+      allow read:   if isOwner(uid);
+      allow create: if isOwner(uid) && validWaterEntry(request.resource.data);
+      allow update: if isOwner(uid) && validWaterEntry(request.resource.data);
+      allow delete: if isOwner(uid);
+    }
+
+    match /users/{uid} {
+      allow read:   if isAuthed();
+      allow write:  if isOwner(uid) && validUserDoc(request.resource.data);
+    }
+
+    match /users/{uid}/custom_drinks/{drinkId} {
+      allow read:   if isOwner(uid);
+      allow create: if isOwner(uid) && validCustomDrink(request.resource.data);
+      allow update: if isOwner(uid) && validCustomDrink(request.resource.data);
+      allow delete: if isOwner(uid);
+    }
+
+    match /users/{uid}/{other=**} {
+      allow read, write: if false;
+    }
+
+    // ─── SHARED DRINKS ─────────────────────────────────────
+    match /app/shared {
+      allow read:  if isAuthed();
+      allow write: if isAdmin() && validSharedDrinks(request.resource.data);
+    }
+
+    // ─── FRAME CATALOG (admin writes, all authed users read) ─
+    match /app/frameCatalog {
+      allow read:  if isAuthed();
+      allow write: if isAdmin();
+    }
+
+    match /app/{other} {
+      allow read, write: if false;
+    }
+
+    // ─── LEADERBOARD ───────────────────────────────────────
+    match /leaderboard/{uid} {
+      allow read:   if isAuthed();
+      allow create,
+            update: if validLeaderboardWrite(uid, request.resource.data);
+      // Admin can delete flagged cheaters
+      allow delete: if isAdmin();
+    }
+
+    // ─── CATCH-ALL ─────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
-
-════════════════════════════════════════════════

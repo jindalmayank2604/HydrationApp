@@ -38,6 +38,76 @@ service cloud.firestore {
           && data.hydration is number && data.hydration >= -100 && data.hydration <= 100;
     }
 
+    function validStringOrNull(value, maxLen) {
+      return value == null || (value is string && value.size() <= maxLen);
+    }
+
+    function validNumberOrNull(value, min, max) {
+      return value == null || (value is number && value >= min && value <= max);
+    }
+
+    function validAchievementState(data) {
+      return !('achievementState' in data)
+        || (
+          data.achievementState is map
+          && data.achievementState.keys().hasOnly([
+            'currentStreak',
+            'lastActiveDate',
+            'coinBalance',
+            'claimedMilestones',
+            'familyMembers',
+            'hydrationGoal',
+            'monthKey',
+            'freeTierUsage',
+            'userProfile',
+            'equippedFrame',
+            'purchasedFrames'
+          ])
+          && data.achievementState.currentStreak is number
+          && data.achievementState.currentStreak >= 0
+          && data.achievementState.currentStreak <= 365
+          && validStringOrNull(data.achievementState.lastActiveDate, 10)
+          && data.achievementState.coinBalance is number
+          && data.achievementState.coinBalance >= 0
+          && data.achievementState.coinBalance <= 1000000
+          && data.achievementState.claimedMilestones is list
+          && data.achievementState.familyMembers is list
+          && (!('equippedFrame' in data.achievementState) || data.achievementState.equippedFrame == null || data.achievementState.equippedFrame is string)
+          && (!('purchasedFrames' in data.achievementState) || data.achievementState.purchasedFrames is list)
+
+          && data.achievementState.hydrationGoal is number
+          && data.achievementState.hydrationGoal >= 500
+          && data.achievementState.hydrationGoal <= 10000
+          && data.achievementState.monthKey is string
+          && data.achievementState.monthKey.size() == 7
+        );
+    }
+
+    function validProfileMeta(data) {
+      return !('profileMeta' in data)
+        || (
+          data.profileMeta is map
+          && validStringOrNull(data.profileMeta.username, 40)
+          && validStringOrNull(data.profileMeta.photoURL, 1000)
+          && validNumberOrNull(data.profileMeta.age, 0, 120)
+          && validNumberOrNull(data.profileMeta.height, 0, 300)
+          && validStringOrNull(data.profileMeta.gender, 20)
+          && validStringOrNull(data.profileMeta.workoutFrequency, 20)
+          && validStringOrNull(data.profileMeta.workoutIntensity, 20)
+        );
+    }
+
+    function validUserDoc(data) {
+      return (!('hydrationGoal' in data) || (data.hydrationGoal is number && data.hydrationGoal >= 500 && data.hydrationGoal <= 10000))
+        && (!('goal' in data) || (data.goal is number && data.goal >= 500 && data.goal <= 10000))
+        && (!('displayName' in data) || validStringOrNull(data.displayName, 40))
+        && (!('photoURL' in data) || validStringOrNull(data.photoURL, 1000))
+        && (!('email' in data) || validStringOrNull(data.email, 200))
+        && (!('surveyDone' in data) || data.surveyDone is bool)
+        && validAchievementState(data)
+        && validProfileMeta(data);
+    }
+
     // ─── LEADERBOARD ANTI-CHEAT ────────────────────────────
     // Cross-validates streak values against actual water_entries data.
     //
@@ -58,6 +128,7 @@ service cloud.firestore {
       let existing = resource != null ? resource.data : null;
       let prevDaily   = existing != null ? existing.dailyStreak   : 0;
       let prevMonthly = existing != null ? existing.monthlyStreak : 0;
+      let isNewDoc    = existing == null;
 
       return
         // Required fields present
@@ -72,8 +143,8 @@ service cloud.firestore {
 
         // Rate-of-change cap: streak can only go up by 1 per write
         // (a legitimate streak increments by 1 day at a time)
-        && data.dailyStreak   <= prevDaily   + 1
-        && data.monthlyStreak <= prevMonthly + 1
+        && (isNewDoc || data.dailyStreak   <= prevDaily   + 1)
+        && (isNewDoc || data.monthlyStreak <= prevMonthly + 1)
 
         // Goal must be realistic (prevents 1ml exploit)
         && data.goal is number && data.goal >= 500 && data.goal <= 10000
@@ -107,7 +178,7 @@ service cloud.firestore {
 
     match /users/{uid} {
       allow read:   if isAuthed();
-      allow write:  if isOwner(uid);
+      allow write:  if isOwner(uid) && validUserDoc(request.resource.data);
     }
 
     match /users/{uid}/custom_drinks/{drinkId} {
@@ -126,6 +197,13 @@ service cloud.firestore {
       allow read:  if isAuthed();
       allow write: if isAdmin() && validSharedDrinks(request.resource.data);
     }
+
+    // ─── FRAME CATALOG (admin writes, all authed users read) ─
+    match /app/frameCatalog {
+      allow read:  if isAuthed();
+      allow write: if isAdmin();
+    }
+
     match /app/{other} {
       allow read, write: if false;
     }

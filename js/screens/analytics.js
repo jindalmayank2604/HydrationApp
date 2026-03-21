@@ -37,6 +37,13 @@ const AnalyticsScreen = (() => {
           <div class="an-loading">⏳ Loading leaderboard…</div>
         </div>
 
+        <div class="tile" id="familyLeaderboardTile">
+          <div class="an-loading">⏳ Loading family leaderboard…</div>
+        </div>
+
+        <!-- Monthly Report (Pro) -->
+        <div id="anReportTile"></div>
+
       </div>
     `;
 
@@ -60,6 +67,8 @@ const AnalyticsScreen = (() => {
     renderChart();
     renderStats();
     renderLeaderboard('daily');
+    renderReportTile();
+    renderFamilyLeaderboard();
   };
 
   /* ── Load all data from Storage ── */
@@ -501,9 +510,12 @@ const AnalyticsScreen = (() => {
           const medal  = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`;
           const isTop3 = i < 3;
           const streak = r[field] || 0;
-          const avatar = window.Profile
-            ? Profile.avatarHTML(r.photoURL||null, r.displayName||'?', 36)
-            : `<div style="width:36px;height:36px;border-radius:50%;background:var(--md-primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex-shrink:0;">${(r.displayName||'?').charAt(0).toUpperCase()}</div>`;
+          // Use equipped frame from leaderboard data (stored globally per user)
+          const avatar = window.Frames
+            ? Frames.avatarWithFrame(r.photoURL||null, r.displayName||'?', 36, r.equippedFrame||false)
+            : (window.Profile
+              ? Profile.avatarHTML(r.photoURL||null, r.displayName||'?', 36)
+              : `<div style="width:36px;height:36px;border-radius:50%;background:var(--md-primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex-shrink:0;">${(r.displayName||'?').charAt(0).toUpperCase()}</div>`);
           return `
             <div class="lb-row${isMe ? ' lb-row--me' : ''}">
               <div class="lb-medal${isTop3 ? '' : ' lb-medal--num'}">${medal}</div>
@@ -522,6 +534,112 @@ const AnalyticsScreen = (() => {
       });
     };
     _startLeaderboard();
+  };
+
+  const renderFamilyLeaderboard = async () => {
+    const tile = Utils.el('familyLeaderboardTile');
+    if (!tile || !window.UserData) return;
+    const state = UserData.getState();
+    tile.innerHTML = `
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;">
+        <div>
+          <div style="font-size:15px;font-weight:700;color:var(--md-on-background);">👨‍👩‍👧‍👦 Family Leaderboard</div>
+          <div style="font-size:12px;color:var(--md-on-surface-med);margin-top:2px;">Add members using Gmail IDs and compare streaks privately.</div>
+        </div>
+        <button id="showFamilyAdd" class="family-add-btn">Add Member to Family</button>
+      </div>
+      <div id="familyAddWrap" class="family-add-wrap" style="display:none;">
+        <input id="familyEmailInput" class="md-input" type="email" placeholder="name@gmail.com" />
+        <button id="familySaveBtn" class="md-btn md-btn--filled">Add</button>
+      </div>
+      <div id="familyRoster" class="family-roster">${(state.familyMembers || []).map((email) => `<span class="family-roster__chip">${Utils.escapeHtml(email)}</span>`).join('')}</div>
+      <div id="familyRows" style="display:flex;flex-direction:column;gap:8px;margin-top:12px;"></div>
+    `;
+
+    tile.querySelector('#showFamilyAdd')?.addEventListener('click', () => {
+      const wrap = tile.querySelector('#familyAddWrap');
+      wrap.style.display = wrap.style.display === 'none' ? 'grid' : 'none';
+    });
+
+    tile.querySelector('#familySaveBtn')?.addEventListener('click', async () => {
+      const email = tile.querySelector('#familyEmailInput')?.value || '';
+      try {
+        await UserData.addFamilyMember(email);
+        Utils.showToast('Family member added.');
+        renderFamilyLeaderboard();
+      } catch (e) {
+        Utils.showToast(e.message);
+      }
+    });
+
+    const rows = await UserData.fetchFamilyLeaderboard();
+    const rowsEl = tile.querySelector('#familyRows');
+    if (!rows.length) {
+      rowsEl.innerHTML = '<div class="an-empty" style="padding:12px 0;">Add your first family member to get started.</div>';
+      return;
+    }
+
+    rowsEl.innerHTML = rows.map((row) => `
+      <div class="lb-row ${row.email === Auth.getSession()?.email ? 'lb-row--me' : ''}">
+        <div class="lb-medal lb-medal--num">${row.rank}</div>
+        ${window.Frames ? Frames.avatarWithFrame(row.photoURL || null, row.displayName || row.email || '?', 38, row.equippedFrame || false) : (window.Profile ? Profile.avatarHTML(row.photoURL || null, row.displayName || row.email || '?', 38) : '')}
+        <div class="lb-info">
+          <div class="lb-name">${Utils.escapeHtml(row.displayName || row.email || 'Member')}</div>
+          <div class="lb-sub">${Utils.escapeHtml(row.email || '')}</div>
+        </div>
+        <div class="lb-streak">
+          <div class="lb-streak-num">${row.dailyStreak || 0}</div>
+          <div class="lb-streak-icon">daily streak</div>
+        </div>
+      </div>
+    `).join('');
+  };
+
+  /* ── Monthly Report Tile (Pro only) ── */
+  const renderReportTile = () => {
+    const tile = Utils.el('anReportTile');
+    if (!tile) return;
+    const role = window.Utils?.getRole ? Utils.getRole() : (Auth.getSession()?.role || 'user').toLowerCase().trim();
+    const email = (Auth.getSession()?.email || '').toLowerCase().trim();
+    const isMaggie = email.startsWith('sampadagupta') && email.endsWith('@gmail.com');
+    const isPro = isMaggie || ['pro','admin','maggie'].includes(role) || window.Utils?.isPrivileged?.();
+
+    if (!isPro) {
+      tile.innerHTML = `
+        <div class="tile an-pro-report-banner">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <div style="font-size:28px;">📄</div>
+            <div style="flex:1;">
+              <div style="font-size:14px;font-weight:700;color:var(--md-on-background);">Monthly Hydration Report</div>
+              <div style="font-size:12px;color:var(--md-on-surface-med);margin-top:3px;">Download a full PDF breakdown of your hydration data.</div>
+            </div>
+            <div style="padding:5px 12px;border-radius:99px;background:rgba(251,188,4,0.15);color:#c88000;font-size:11px;font-weight:800;flex-shrink:0;">PRO</div>
+          </div>
+          <button class="md-btn md-btn--filled md-btn--full" style="margin-top:14px;background:linear-gradient(135deg,#FBBC04,#F57C00);color:#000;"
+            onclick="Router.navigate('shop')">✨ Upgrade to Pro</button>
+        </div>`;
+      return;
+    }
+
+    tile.innerHTML = `
+      <div class="tile">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <div style="font-size:28px;">📄</div>
+          <div style="flex:1;">
+            <div style="font-size:14px;font-weight:700;color:var(--md-on-background);">Monthly Hydration Report</div>
+            <div style="font-size:12px;color:var(--md-on-surface-med);margin-top:3px;">Full PDF breakdown of your hydration this month.</div>
+          </div>
+        </div>
+        <button class="md-btn md-btn--filled md-btn--full" id="anDownloadReportBtn" style="margin-top:14px;">⬇️ Download Report</button>
+      </div>`;
+
+    Utils.el('anDownloadReportBtn')?.addEventListener('click', () => {
+      if (window.DataExport?.downloadMonthlyPDF) {
+        DataExport.downloadMonthlyPDF();
+      } else {
+        Utils.showToast('Report feature loading...');
+      }
+    });
   };
 
   return { init };

@@ -1,560 +1,994 @@
-/* ══════════════════════════════════════════
-   SCREEN: Settings
-   Admin → sees Firebase status + danger zone
-   User  → sees goal + account only
-   ══════════════════════════════════════════ */
-
 const SettingsScreen = (() => {
+  function render() {
+    renderForRole();
+  }
 
-  const render = () => renderForRole();
+  function renderForRole() {
+    const root = Utils.el('settings-root');
+    if (!root) return;
+    const session = Auth.getSession() || {};
+    const state = window.UserData ? UserData.getState() : { userProfile: {}, hydrationGoal: Storage.getGoal(), familyMembers: [] };
+    const profile = {
+      username: session.displayName || state.userProfile.username || session.email?.split('@')[0] || 'User',
+      photoURL: session.photoURL || state.userProfile.photoURL || null,
+      age: state.userProfile.age || '',
+      dob: state.userProfile.dob || '',
+      height: state.userProfile.height || '',
+      gender: state.userProfile.gender || '',
+      workoutFrequency: state.userProfile.workoutFrequency || 'moderate',
+      workoutIntensity: state.userProfile.workoutIntensity || 'light',
+      workoutToday: !!state.userProfile.workoutToday,
+    };
+    const usage = window.UserData ? UserData.canUseFreeDrink() : { limit: null, used: 0, remaining: 0 };
+    const role = window.Utils?.getRole ? Utils.getRole() : (Auth.getSession()?.role || 'user').toLowerCase().trim();
+    const _settingsEmail = (Auth.getSession()?.email || '').toLowerCase().trim();
+    const _isMaggie = _settingsEmail.startsWith('sampadagupta') && _settingsEmail.endsWith('@gmail.com');
+    const isAdmin = role === 'admin';
+    const isPro   = _isMaggie || ['pro','admin','maggie'].includes(role) || window.Utils?.isPrivileged?.();
 
-  const renderForRole = () => {
-    const isAdmin     = Auth.isAdmin();
-    const session     = Auth.getSession();
-    /* Use Utils.getRole() so Maggie is treated as privileged even if Firestore role = "user" */
-    const role         = window.Utils?.getRole ? Utils.getRole() : (session?.role || 'user').toLowerCase();
-    const isPro        = ['pro', 'maggie', 'admin'].includes(role);
-    const isPrivileged = isPro;
-    const isConnected = Firebase.isInitialized();
-    const email       = session?.email || '';
-    const name        = session?.displayName || email.split('@')[0] || 'User';
-    const photoURL    = session?.photoURL || null;
-
-    Utils.el('settings-root').innerHTML = `
-      <div class="screen-stack">
-
-        <!-- ══ Account tile ══ -->
-        <div class="tile settings-account-tile">
-
-          <!-- Avatar row -->
-          <div class="settings-account-row" style="margin-bottom:16px;">
-
-            <!-- Tappable avatar with camera badge -->
-            <div style="position:relative;flex-shrink:0;cursor:pointer;" title="Tap to change photo">
-              ${session?.photoURL
-                ? `<img id="settingsAvatar" src="${Utils.escapeHtml(session.photoURL)}"
-                    style="width:60px;height:60px;border-radius:50%;object-fit:cover;border:3px solid var(--md-primary);"
-                    onerror="this.outerHTML='<div id=settingsAvatar style=width:60px;height:60px;border-radius:50%;background:var(--md-primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:24px;>${name.charAt(0).toUpperCase()}</div>'" />`
-                : `<div id="settingsAvatar" style="width:60px;height:60px;border-radius:50%;background:var(--md-primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:24px;">${name.charAt(0).toUpperCase()}</div>`
-              }
-              <div style="position:absolute;bottom:-2px;right:-2px;width:22px;height:22px;border-radius:50%;background:var(--md-primary);display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid var(--md-surface);">📷</div>
-              <input type="file" id="avatarFileInput" accept="image/*"
-                style="position:absolute;inset:0;opacity:0;cursor:pointer;border-radius:50%;width:100%;height:100%;" />
+    root.innerHTML = `
+      <div class="screen-stack settings-stack">
+        <section class="settings-shell">
+          <div class="settings-shell__header">
+            <div>
+              <div class="achievement-pill achievement-pill--shop">Settings</div>
+              <h2 class="settings-shell__title">Your hydration profile</h2>
+              <p class="settings-shell__sub">Clean, structured controls for profile, account details, preferences, and workout-driven hydration targets.</p>
             </div>
+            <button id="openEditProfile" class="settings-edit-trigger">Edit Profile</button>
+          </div>
 
-            <!-- Name + email + badge -->
-            <div class="settings-account-info" style="flex:1;min-width:0;">
-              <div class="settings-account-name">${Utils.escapeHtml(name)}</div>
-              <div class="settings-account-email" style="font-size:12px;">${Utils.escapeHtml(email)}</div>
-              <div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
-                <span class="role-badge ${isAdmin ? 'role-badge--admin' : isPro ? 'role-badge--pro' : 'role-badge--user'}">
-                  ${isAdmin ? '🔑 Admin' : isPro ? '⭐ Pro' : '👤 User'}
-                </span>
+          <div class="settings-grid">
+            <section class="tile settings-card settings-card--profile">
+              <div class="settings-card__head">
+                <div>
+                  <div class="settings-section-eyebrow">Profile</div>
+                  <div class="settings-section-title">Identity & hydration basics</div>
+                </div>
               </div>
-            </div>
-          </div>
-
-          <!-- Upload status -->
-          <div id="avatarStatus" style="font-size:12px;min-height:16px;text-align:center;font-weight:600;margin-bottom:2px;"></div>
-          <!-- Remove photo (only shown when photo exists) -->
-          ${session?.photoURL ? `
-          <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--md-surface-3);">
-            <button id="removePhotoBtn" style="
-              display:flex;align-items:center;justify-content:center;gap:7px;
-              width:100%;padding:10px 14px;border-radius:12px;cursor:pointer;
-              background:rgba(217,48,37,0.06);
-              border:1.5px solid rgba(217,48,37,0.25);
-              color:#D93025;font-size:13px;font-weight:600;
-              font-family:var(--font-body);
-              transition:all 0.15s;">
-              🗑️ Remove Profile Photo
-            </button>
-          </div>` : ''}
-
-          <!-- Username edit -->
-          <div style="border-top:1px solid var(--md-surface-3);padding-top:14px;margin-top:6px;">
-            <div style="font-size:11px;font-weight:700;color:var(--md-on-surface-med);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">✏️ Display Name</div>
-            <div style="display:flex;gap:8px;">
-              <input class="md-input" id="usernameInput" type="text" maxlength="30"
-                value="${Utils.escapeHtml(name)}" placeholder="Your name…"
-                style="flex:1;padding:10px 14px;font-size:14px;" />
-              <button id="saveUsernameBtn" style="
-                padding:10px 16px;border-radius:12px;border:none;
-                background:var(--md-primary);color:#fff;
-                font-size:13px;font-weight:700;cursor:pointer;
-                font-family:var(--font-body);white-space:nowrap;">Save</button>
-            </div>
-            <div id="usernameStatus" style="font-size:12px;min-height:16px;margin-top:6px;font-weight:600;"></div>
-          </div>
-
-          <button class="danger-btn" id="signOutBtn" style="margin-top:14px;">🚪 Sign Out</button>
-        </div>
-
-        <!-- Daily Goal (everyone) -->
-        <div class="tile">
-          <div class="settings-section-title">🎯 Daily Goal</div>
-          <div style="display:flex;gap:12px;align-items:center;margin-top:12px;">
-            <input class="md-input" type="number" id="goalInput"
-              value="${Storage.getGoal()}" min="500" max="10000" style="flex:1;" />
-            <span style="color:var(--md-on-surface-med);font-size:14px;font-weight:600;">ml / day</span>
-          </div>
-          <button class="md-btn md-btn--filled md-btn--full" id="saveGoalBtn"
-            style="border-radius:12px;padding:12px;margin-top:12px;">Save Goal</button>
-          <div style="font-size:12px;color:var(--md-on-surface-med);margin-top:8px;">
-            WHO recommends 2500–3500 ml/day
-          </div>
-        </div>
-
-        ${!isAdmin && !isPro ? proUpgradeBanner() : ''}
-
-        ${isPrivileged ? `
-        <!-- ── Monthly Report Download (Pro/Admin/Maggie) ── -->
-        <div class="tile" style="border:1.5px solid rgba(251,188,4,0.3);background:linear-gradient(135deg,rgba(251,188,4,0.05),rgba(255,143,0,0.04));">
-          <div style="display:flex;align-items:center;gap:12px;">
-            <div style="font-size:28px;">📄</div>
-            <div style="flex:1;">
-              <div style="font-size:14px;font-weight:700;color:var(--md-on-background);">Monthly Report</div>
-              <div style="font-size:12px;color:var(--md-on-surface-med);margin-top:2px;">
-                Download your hydration data as a PDF
+              <div class="settings-profile-summary">
+                <div class="settings-profile-summary__avatar">
+                  ${window.Profile ? Profile.avatarHTML(profile.photoURL, profile.username, 84) : ''}
+                </div>
+                <div class="settings-profile-summary__info">
+                  <div class="settings-profile-summary__name">${Utils.escapeHtml(profile.username)}</div>
+                  <div class="settings-profile-summary__email">${Utils.escapeHtml(session.email || '')}</div>
+                </div>
               </div>
-            </div>
+              <div class="settings-stat-grid">
+                <div class="settings-mini-stat settings-mini-stat--clickable" id="editGoalTrigger">
+                  <span class="settings-mini-stat__label">Hydration goal</span>
+                  <strong class="settings-mini-stat__value">${state.hydrationGoal} ml</strong>
+                  <span class="goal-edit-hint">${(() => { try { const g=JSON.parse(localStorage.getItem('wt_goal_edit_v1')||'{}'); const today=new Date().toISOString().slice(0,10); return g.date===today ? '🔒 locked today' : '✏️ tap to edit'; } catch(e){ return '✏️ tap to edit'; } })()}</span>
+                </div>
+                <div class="settings-mini-stat">
+                  <span class="settings-mini-stat__label">Workout mode</span>
+                  <strong class="settings-mini-stat__value">${profile.workoutToday ? 'Active' : 'Off'}</strong>
+                </div>
+                <div class="settings-mini-stat">
+                  <span class="settings-mini-stat__label">Coins</span>
+                  <strong class="settings-mini-stat__value">${state.coinBalance || 0}</strong>
+                </div>
+              </div>
+            </section>
+
+            <section class="tile settings-card settings-card--vitals">
+              <div class="settings-card__head">
+                <div>
+                  <div class="settings-section-eyebrow">Body & Vitals</div>
+                  <div class="settings-section-title">Your personal stats</div>
+                </div>
+              </div>
+              <div class="vitals-grid" id="vitalsGrid">
+                ${(() => {
+                  // Read directly from localStorage for immediate display — no async wait needed
+                  let vp = profile;
+                  if (!vp.age && !vp.dob && !vp.height && !vp.gender) {
+                    try {
+                      const _ls = JSON.parse(localStorage.getItem('wt_user_state_v2'));
+                      if (_ls && _ls.userProfile) vp = { ...vp, ..._ls.userProfile };
+                    } catch(e) {}
+                  }
+
+                  let ageStr = '—';
+                  let dobStr = '—';
+                  if (vp.dob) {
+                    const _p = vp.dob.split('-');
+                    const _d = new Date(_p[0], Number(_p[1])-1, _p[2]);
+                    const _a = Math.floor((Date.now()-_d.getTime())/(365.25*24*60*60*1000));
+                    if (!isNaN(_a) && _a > 0) ageStr = _a + '';
+                    dobStr = _d.getDate().toString().padStart(2,'0') + ' ' +
+                      ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][_d.getMonth()] +
+                      ' ' + _d.getFullYear();
+                  } else if (vp.age) {
+                    ageStr = vp.age + '';
+                  }
+
+                  const htStr  = vp.height ? vp.height + ' cm' : '—';
+                  const genStr = vp.gender ? (vp.gender.charAt(0).toUpperCase() + vp.gender.slice(1)) : '—';
+
+                  return [
+                    '<div class="vital-item"><span class="vital-icon">🎂</span><div class="vital-body"><span class="vital-label">Date of Birth</span><span class="vital-value">' + dobStr + '</span></div></div>',
+                    '<div class="vital-item"><span class="vital-icon">🗓️</span><div class="vital-body"><span class="vital-label">Age</span><span class="vital-value">' + (ageStr !== '—' ? ageStr + ' yrs' : '—') + '</span></div></div>',
+                    '<div class="vital-item"><span class="vital-icon">📏</span><div class="vital-body"><span class="vital-label">Height</span><span class="vital-value">' + htStr + '</span></div></div>',
+                    '<div class="vital-item"><span class="vital-icon">⚧️</span><div class="vital-body"><span class="vital-label">Gender</span><span class="vital-value">' + genStr + '</span></div></div>'
+                  ].join('');
+                })()}
+              </div>
+            </section>
+
+            <section class="tile settings-card">
+              <div class="settings-card__head">
+                <div>
+                  <div class="settings-section-eyebrow">Account</div>
+                  <div class="settings-section-title">Plan, family, and streak context</div>
+                </div>
+              </div>
+              <div class="settings-detail-list">
+                <div class="settings-detail-row"><span>Plan</span><strong>${['pro', 'admin', 'maggie'].includes(role) ? 'Pro' : 'Free'}</strong></div>
+                <div class="settings-detail-row"><span>Current streak</span><strong>${state.currentStreak || 0} days</strong></div>
+                <div class="settings-detail-row"><span>Family members</span><strong>${(state.familyMembers || []).length}</strong></div>
+                <div class="settings-detail-row"><span>Custom drink allowance</span><strong>${usage.limit ? `${usage.remaining} of ${usage.limit} left` : 'Unlimited'}</strong></div>
+                <div class="settings-detail-row"><span>Daily AI scans</span><strong>${['pro','admin','maggie'].includes(role) ? '450/month' : '2/day'}</strong></div>
+              </div>
+              <button id="openFamilyManager" class="settings-inline-btn">Manage family list</button>
+              <button id="openFramePicker" class="settings-inline-btn" style="margin-top:6px;">🖼️ Your Frames — Tap to equip</button>
+            </section>
+
+            <section class="tile settings-card">
+              <div class="settings-card__head">
+                <div>
+                  <div class="settings-section-eyebrow">Preferences</div>
+                  <div class="settings-section-title">Hydration behavior</div>
+                </div>
+              </div>
+              <div class="settings-form-grid">
+                <label class="settings-field-card">
+                  <span class="md-input-label">Workout intensity</span>
+                  <div class="styled-select-wrap" id="wrapSettingsIntensity">
+                    <button type="button" class="styled-select-btn" data-target="ddSettingsIntensity">
+                      <span class="styled-select-val">${profile.workoutIntensity || 'light'}</span>
+                      <svg class="styled-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+                    <div class="styled-select-dropdown" id="ddSettingsIntensity">
+                      ${['none','light','moderate','intense','athlete'].map(opt => `<div class="styled-select-opt${profile.workoutIntensity===opt?' is-sel':''}" data-val="${opt}">${opt}</div>`).join('')}
+                    </div>
+                    <input type="hidden" id="settingsWorkoutIntensity" value="${profile.workoutIntensity || 'light'}"/>
+                  </div>
+                </label>
+                <label class="settings-field-card">
+                  <span class="md-input-label">Workout frequency</span>
+                  <div class="styled-select-wrap" id="wrapSettingsFrequency">
+                    <button type="button" class="styled-select-btn" data-target="ddSettingsFrequency">
+                      <span class="styled-select-val">${profile.workoutFrequency || 'moderate'}</span>
+                      <svg class="styled-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+                    <div class="styled-select-dropdown" id="ddSettingsFrequency">
+                      ${['rare','light','moderate','frequent','daily'].map(opt => `<div class="styled-select-opt${profile.workoutFrequency===opt?' is-sel':''}" data-val="${opt}">${opt}</div>`).join('')}
+                    </div>
+                    <input type="hidden" id="settingsWorkoutFrequency" value="${profile.workoutFrequency || 'moderate'}"/>
+                  </div>
+                </label>
+                <label class="toggle-wrap">
+                    <div class="toggle-text">
+                      <div class="toggle-title">Workout day boost</div>
+                      <div class="toggle-sub">Increase today's hydration goal in real time.</div>
+                    </div>
+                    <input id="settingsWorkoutToday" type="checkbox" class="toggle-input" ${profile.workoutToday ? 'checked' : ''} />
+                    <div class="toggle-track"></div>
+                  </label>
+              </div>
+              <button id="savePreferencesBtn" class="md-btn md-btn--filled md-btn--full">Update Preferences</button>
+            </section>
+
+            <section class="tile settings-card">
+              <div class="settings-card__head">
+                <div>
+                  <div class="settings-section-eyebrow">Expandable</div>
+                  <div class="settings-section-title">Future-ready systems</div>
+                </div>
+              </div>
+              <div class="settings-detail-list">
+                <div class="settings-detail-row"><span>Shop system</span><strong>Structured</strong></div>
+                <div class="settings-detail-row"><span>Achievement claims</span><strong>Live</strong></div>
+                <div class="settings-detail-row"><span>Family leaderboard</span><strong>Private</strong></div>
+              </div>
+              <div class="settings-coming-soon">Upgrade hooks and spendable coin inventory are ready for the next phase.</div>
+            </section>
           </div>
-          <button id="downloadReportBtn" style="
-            width:100%;margin-top:14px;padding:13px;border-radius:14px;border:none;cursor:pointer;
-            background:linear-gradient(135deg,#FBBC04,#F57C00);
-            color:#000;font-size:14px;font-weight:800;font-family:var(--font-body);
-            box-shadow:0 4px 14px rgba(251,188,4,0.3);transition:all 0.15s;">
-            📥 Download This Month's Report
-          </button>
-        </div>` : ''}
+        </section>
 
-        ${isAdmin ? adminOnlyHTML(isConnected) : userRestrictedBanner()}
+        ${isAdmin ? `
+          <section class="tile settings-card">
+            <div class="settings-section-eyebrow">Admin</div>
+            <div class="settings-section-title">Shared drink catalog</div>
+            <div class="settings-section-sub">Manage drink types visible to every user.</div>
+            <div id="drinksList" style="display:flex;flex-direction:column;gap:8px;"></div>
+            <button class="md-btn md-btn--filled md-btn--full" id="addDrinkBtn">+ Add Shared Drink</button>
+          </section>
+        ` : `
+          <section class="tile settings-card">
+            <div class="settings-section-eyebrow">Private Drinks</div>
+            <div class="settings-section-title">Your custom drink library</div>
+            <div class="settings-section-sub">Only you can see these drink types.</div>
+            <div id="privateDrinksList" style="display:flex;flex-direction:column;gap:8px;"></div>
+            <button class="md-btn md-btn--filled md-btn--full" id="addPrivateDrinkBtn">+ Add My Custom Drink</button>
+          </section>
+        `}
 
+        ${isPro ? `
+        <section class="tile settings-card">
+          <div class="settings-card__head">
+            <div class="settings-section-eyebrow">Reports</div>
+            <div class="settings-section-title">Monthly Hydration Report</div>
+            <div class="settings-section-sub">Download a full PDF breakdown of your hydration data for this month.</div>
+          </div>
+          <button class="md-btn md-btn--filled md-btn--full" id="downloadReportBtn">⬇️ Download Report</button>
+        </section>
+        ` : ''}
+
+        <!-- Danger Zone: admin only -->
+        ${isAdmin ? `
+        <section class="tile settings-card settings-card--danger">
+          <div class="settings-section-eyebrow" style="color:#D93025;">Danger Zone</div>
+          <div class="settings-section-title">Reset & Sign out</div>
+          <div class="settings-section-sub">Resetting your data is permanent and cannot be undone.</div>
+          <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px;">
+            <button class="danger-btn" id="resetDataBtn">🗑️ Reset All My Data</button>
+            <button class="danger-btn" id="signOutBtn" style="background:transparent;border:1.5px solid rgba(217,48,37,0.4);color:var(--md-on-surface-med);">Sign Out</button>
+          </div>
+        </section>
+        ` : `
+        <section class="tile settings-card">
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <button class="danger-btn" id="signOutBtn" style="background:transparent;border:1.5px solid rgba(217,48,37,0.4);color:var(--md-on-surface-med);">Sign Out</button>
+          </div>
+        </section>
+        `}
       </div>
     `;
 
-    bindEvents(isAdmin);
-  };
+    bindEvents({ isAdmin, profile });
+    setTimeout(() => initStyledSelects(), 50);
+  }
 
-  /* ── Pro upgrade banner (shown to free users only) ── */
-  const proUpgradeBanner = () => `
-    <div style="
-      border-radius:20px;overflow:hidden;
-      background:linear-gradient(135deg,#1A1200,#2C1F00);
-      border:1.5px solid rgba(251,188,4,0.35);
-      position:relative;
-    ">
-      <!-- Decorative glow blob -->
-      <div style="
-        position:absolute;top:-40px;right:-40px;
-        width:140px;height:140px;border-radius:50%;
-        background:radial-gradient(circle,rgba(251,188,4,0.15),transparent 70%);
-        pointer-events:none;
-      "></div>
+  function bindEvents({ isAdmin, profile }) {
+    Utils.el('openEditProfile')?.addEventListener('click', openEditProfileModal);
+    Utils.el('openFamilyManager')?.addEventListener('click', openFamilyManagerModal);
 
-      <div style="padding:22px 20px;position:relative;">
-
-        <!-- Header -->
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-          <div style="font-size:28px;">⭐</div>
-          <div>
-            <div style="font-size:16px;font-weight:800;color:#FBBC04;letter-spacing:-0.2px;">
-              HydrationApp Pro
-            </div>
-            <div style="font-size:12px;color:rgba(251,188,4,0.6);font-weight:500;">
-              Unlock your full potential
-            </div>
-          </div>
-          <div style="
-            margin-left:auto;
-            background:rgba(251,188,4,0.15);
-            color:#FBBC04;font-size:10px;font-weight:800;
-            padding:3px 10px;border-radius:99px;
-            border:1px solid rgba(251,188,4,0.3);
-            white-space:nowrap;
-          ">COMING SOON</div>
-        </div>
-
-        <!-- Feature list -->
-        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <div style="color:#FBBC04;font-size:15px;flex-shrink:0;">✓</div>
-            <div>
-              <span style="font-size:13px;font-weight:700;color:#fff;">450 AI drink scans</span>
-              <span style="font-size:12px;color:rgba(255,255,255,0.5);"> / month</span>
-            </div>
-            <div style="margin-left:auto;font-size:11px;color:rgba(255,255,255,0.3);">6/day free</div>
-          </div>
-          <div style="display:flex;align-items:center;gap:10px;">
-            <div style="color:#FBBC04;font-size:15px;flex-shrink:0;">✓</div>
-            <div>
-              <span style="font-size:13px;font-weight:700;color:#fff;">Unlimited custom drinks</span>
-            </div>
-            <div style="margin-left:auto;font-size:11px;color:rgba(255,255,255,0.3);">5 free</div>
-          </div>
-          <div style="display:flex;align-items:center;gap:10px;opacity:0.45;">
-            <div style="color:#FBBC04;font-size:15px;flex-shrink:0;">✓</div>
-            <div>
-              <span style="font-size:13px;font-weight:700;color:#fff;">Advanced analytics</span>
-              <span style="font-size:11px;color:rgba(255,255,255,0.5);"> — soon</span>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;gap:10px;opacity:0.45;">
-            <div style="color:#FBBC04;font-size:15px;flex-shrink:0;">✓</div>
-            <div>
-              <span style="font-size:13px;font-weight:700;color:#fff;">⭐ Pro badge on leaderboard</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Divider -->
-        <div style="border-top:1px solid rgba(251,188,4,0.15);margin-bottom:16px;"></div>
-
-        <!-- CTA -->
-        <button id="proUpgradeBtn" style="
-          width:100%;padding:14px;border-radius:14px;border:none;cursor:pointer;
-          background:linear-gradient(135deg,rgba(251,188,4,0.3),rgba(255,143,0,0.2));
-          color:#FBBC04;font-size:14px;font-weight:800;font-family:var(--font-body);
-          border:1.5px solid rgba(251,188,4,0.4);
-          letter-spacing:0.3px;transition:all 0.15s;
-        " onclick="SettingsScreen._handleProUpgrade()">
-          ✨ Upgrade to Pro — Coming Soon
-        </button>
-
-        <div style="font-size:11px;color:rgba(255,255,255,0.25);text-align:center;margin-top:10px;">
-          Premium pricing will be announced soon
-        </div>
-      </div>
-    </div>
-  `;
-
-  /* ── Admin-only section ── */
-  const adminOnlyHTML = (isConnected) => `
-
-    <!-- Drinks Manager -->
-    <div class="tile">
-      <div class="settings-section-title">🥤 Drink Types</div>
-      <div class="settings-section-sub">Changes here apply to <strong>all users</strong> 🌐</div>
-      <div id="drinksList" style="margin-top:12px;display:flex;flex-direction:column;gap:8px;"></div>
-      <button class="md-btn md-btn--filled md-btn--full" id="addDrinkBtn"
-        style="margin-top:12px;border-radius:12px;padding:10px;">+ Add Custom Drink</button>
-    </div>
-
-    <!-- Firebase Status -->
-    <div class="settings-status-tile ${isConnected ? 'connected' : 'disconnected'}">
-      <div class="settings-status-icon">${isConnected ? '🔥' : '📦'}</div>
-      <div class="settings-status-info">
-        <div class="settings-status-title">${isConnected ? 'Firebase Connected' : 'Connecting…'}</div>
-        <div class="settings-status-sub">${isConnected ? 'Data syncing to Firestore — separate per user' : 'Not connected yet'}</div>
-      </div>
-    </div>
-
-    <!-- Danger Zone -->
-    <div class="tile" style="border:2px solid #FFCDD2;">
-      <div class="settings-section-title" style="color:#D93025;">⚠️ Danger Zone</div>
-      <div class="settings-section-sub">Admin-only. Affects YOUR data only. Permanent.</div>
-      <div id="dangerStatus" style="margin:8px 0;min-height:20px;font-size:13px;font-weight:600;"></div>
-      <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px;">
-        <button class="danger-btn" id="resetTodayBtn">🗑 Clear My Today's Data</button>
-        <button class="danger-btn danger-btn--hard" id="resetAllBtn">💣 Reset My Entire History</button>
-      </div>
-    </div>
-  `;
-
-  /* ── Non-admin banner ── */
-  const userRestrictedBanner = () => `
-    <!-- User private drinks -->
-    <div class="tile">
-      <div class="settings-section-title">🥤 My Custom Drinks</div>
-      <div class="settings-section-sub">These drinks are <strong>visible only to you</strong> 🔒</div>
-      <div id="privateDrinksList" style="margin-top:12px;display:flex;flex-direction:column;gap:8px;"></div>
-      <button class="md-btn md-btn--filled md-btn--full" id="addPrivateDrinkBtn"
-        style="margin-top:12px;border-radius:12px;padding:10px;">+ Add My Custom Drink</button>
-    </div>
-
-    <div class="tile locked-banner">
-      <div style="display:flex;align-items:center;gap:12px;">
-        <span style="font-size:28px;">🔒</span>
-        <div>
-          <div class="locked-title">Admin Settings Locked</div>
-          <div class="locked-sub">Database controls are only accessible to the admin.</div>
-        </div>
-      </div>
-    </div>
-  `;
-
-  /* ── Events ── */
-  const bindEvents = (isAdmin) => {
-
-    /* ── Photo upload — uses Profile.uploadPhoto() for smart compression ── */
-    Utils.el('avatarFileInput')?.addEventListener('change', async function() {
-      const file    = this.files[0];
-      if (!file) return;
-      const statusEl = Utils.el('avatarStatus');
-      statusEl.textContent = '⏳ Compressing & uploading…';
-      statusEl.style.color = 'var(--md-on-surface-med)';
+    // Goal edit - once per day
+    Utils.el('editGoalTrigger')?.addEventListener('click', () => {
+      const today = new Date().toISOString().slice(0,10);
       try {
-        /* Profile.uploadPhoto handles compression (quality ladder down to 150KB)
-           then uploads to Cloudinary. No size limit — any resolution is accepted. */
-        const url = await Profile.uploadPhoto(file);
-
-        /* Save URL to Firestore + patch session */
-        await Profile.saveProfile({ photoURL: url });
-
-        /* Update avatar circle in tile */
-        const av = Utils.el('settingsAvatar');
-        if (av) {
-          const img = document.createElement('img');
-          img.id = 'settingsAvatar';
-          img.src = url;
-          img.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;border:3px solid var(--md-primary);';
-          av.replaceWith(img);
+        const g = JSON.parse(localStorage.getItem('wt_goal_edit_v1') || '{}');
+        if (g.date === today) {
+          Utils.showToast('⏰ Goal can only be edited once per day');
+          return;
         }
+      } catch(e) {}
+      openGoalEditModal();
+    });
+    Utils.el('openFramePicker')?.addEventListener('click', openFramePickerModal);
 
-        /* Update header */
-        if (window.App) App.updateHeaderAvatar(Auth.getSession());
-        if (window.Leaderboard) Leaderboard.publishStreak(Firebase.getUserId()).catch(() => {});
-
-        statusEl.textContent = '✅ Photo updated!';
-        statusEl.style.color = '#34A853';
-        Utils.showToast('📷 Profile photo updated!');
-      } catch (err) {
-        statusEl.textContent = '❌ ' + err.message;
-        statusEl.style.color = '#D93025';
+    Utils.el('savePreferencesBtn')?.addEventListener('click', async () => {
+      try {
+        const _workoutToday = !!Utils.el('settingsWorkoutToday')?.checked;
+        // Immediately persist to separate key so refresh doesn't lose it
+        try {
+          const _ls = JSON.parse(localStorage.getItem('wt_user_state_v2')) || {};
+          if (_ls.userProfile) { _ls.userProfile.workoutToday = _workoutToday; localStorage.setItem('wt_user_state_v2', JSON.stringify(_ls)); }
+        } catch(e) {}
+        await UserData.saveProfile({
+          workoutIntensity: Utils.el('settingsWorkoutIntensity')?.value || profile.workoutIntensity,
+          workoutFrequency: Utils.el('settingsWorkoutFrequency')?.value || profile.workoutFrequency,
+          workoutToday: _workoutToday,
+        });
+        await UserData.recomputeProgress();
+        if (window.HomeScreen) HomeScreen.updateUI();
+        Utils.showToast('Preferences updated.');
+        renderForRole();
+      } catch (e) {
+        Utils.showToast(e.message);
       }
-      this.value = '';
     });
 
-    /* ── Monthly report download ── */
     Utils.el('downloadReportBtn')?.addEventListener('click', () => {
-      DataExport.downloadMonthlyPDF();
-    });
-
-    /* ── Remove photo ── */
-    Utils.el('removePhotoBtn')?.addEventListener('click', async () => {
-      if (!confirm('Remove your profile photo?')) return;
-      const uid     = Firebase.getUserId();
-      const session = Auth.getSession();
-      try {
-        if (uid) await firebase.firestore().collection('users').doc(uid).set({ photoURL: null }, { merge: true });
-        Auth.saveSession({ ...session, photoURL: null }, session?.rememberMe !== false);
-        /* Reset settings avatar to letter circle */
-        const av = Utils.el('settingsAvatar');
-        if (av) {
-          const letter = (session?.displayName || session?.email || '?').charAt(0).toUpperCase();
-          const div = document.createElement('div');
-          div.id = 'settingsAvatar';
-          div.style.cssText = 'width:60px;height:60px;border-radius:50%;background:var(--md-primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:24px;';
-          div.textContent = letter;
-          av.replaceWith(div);
-        }
-        /* Reset header avatar back to 💧 dewdrop */
-        const hav = Utils.el('headerAvatar');
-        if (hav) {
-          hav.style.background = 'var(--md-primary-light)';
-          hav.style.fontSize   = '20px';
-          hav.innerHTML        = '💧';
-        }
-        /* Hide remove button */
-        Utils.el('removePhotoBtn')?.closest('div')?.remove();
-        if (window.Leaderboard && uid) Leaderboard.publishStreak(uid).catch(() => {});
-        Utils.showToast('🗑 Photo removed');
-      } catch(err) {
-        Utils.showToast('❌ ' + err.message);
+      if (window.DataExport?.downloadMonthlyPDF) {
+        DataExport.downloadMonthlyPDF();
+      } else {
+        Utils.showToast('Report feature loading...');
       }
     });
 
-    /* ── Username save ── */
-    Utils.el('saveUsernameBtn')?.addEventListener('click', async () => {
-      const input  = Utils.el('usernameInput');
-      const status = Utils.el('usernameStatus');
-      const newName = (input?.value || '').trim();
-      if (newName.length < 2) { status.textContent = '⚠️ Min 2 characters'; status.style.color = '#D93025'; return; }
-      if (newName.length > 30) { status.textContent = '⚠️ Max 30 characters'; status.style.color = '#D93025'; return; }
-      const btn = Utils.el('saveUsernameBtn');
-      btn.textContent = '⏳'; btn.disabled = true;
+    Utils.el('resetDataBtn')?.addEventListener('click', async () => {
+      if (!confirm('This will permanently delete all your hydration data. Are you sure?')) return;
+      if (!confirm('Are you absolutely sure? This cannot be undone.')) return;
       try {
-        const session = Auth.getSession();
-        const uid     = Firebase.getUserId();
-        /* Save to Firestore */
-        if (uid) {
-          await firebase.firestore().collection('users').doc(uid).set({ displayName: newName }, { merge: true });
-          await firebase.firestore().collection('Roles').doc((session?.email || '').toLowerCase())
-            .set({ displayName: newName }, { merge: true }).catch(()=>{});
-        }
-        /* Patch session */
-        Auth.saveSession({ ...session, displayName: newName }, session?.rememberMe !== false);
-        /* Update header */
-        const greetEl = Utils.el('greeting');
-        if (greetEl) {
-          // maggieTag removed — Pro badge handled below
-          const _em3 = (session?.email||'').toLowerCase().trim();
-          const _isMaggie = _em3.startsWith('sampadagupta') && _em3.endsWith('@gmail.com');
-          const _isPro = (session?.role||'').toLowerCase().trim() === 'pro' || _isMaggie;
-          const _badge = Auth.isAdmin() ? '<span class="admin-badge">Admin</span>' : _isPro ? '<span class="role-badge role-badge--pro">Pro</span>' : '👋';
-          greetEl.innerHTML = `Hey, ${Utils.escapeHtml(newName)} ${_badge}`;
-        }
-        const nameEl = document.querySelector('.settings-account-name');
-        if (nameEl) nameEl.textContent = newName;
-        if (uid && window.Leaderboard) Leaderboard.publishStreak(uid).catch(()=>{});
-        status.textContent = '✅ Name updated!'; status.style.color = '#34A853';
-        Utils.showToast('✏️ Username updated!');
-      } catch(err) {
-        status.textContent = '❌ ' + err.message; status.style.color = '#D93025';
-      }
-      btn.textContent = 'Save'; btn.disabled = false;
+        await Firebase.resetAllData();
+        Utils.showToast('All data reset.');
+        renderForRole();
+      } catch (e) { Utils.showToast(e.message); }
     });
 
-    /* Sign out */
     Utils.el('signOutBtn')?.addEventListener('click', async () => {
       if (!confirm('Sign out?')) return;
       await Auth.signOut();
       Firebase.resetUserId();
       Router.navigate('home');
       LoginScreen.show();
-      Utils.showToast('👋 Signed out');
+      Utils.showToast('Signed out.');
     });
 
-    /* Save goal */
-    Utils.el('saveGoalBtn')?.addEventListener('click', () => {
-      const val = parseInt(Utils.el('goalInput').value);
-      if (isNaN(val) || val < 500) { Utils.showToast('⚠️ Minimum goal is 500 ml'); return; }
-      Storage.setGoal(val);
-      Utils.showToast('🎯 Daily goal updated!');
-      // CHANGE-3: re-publish streak with updated goal so leaderboard reflects new target
-      const uid = Firebase.getUserId();
-      if (uid && window.Leaderboard) Leaderboard.publishStreak(uid).catch(() => {});
-      HomeScreen.updateUI();
-    });
-
-    /* Private drinks (all users) */
-    if (Utils.el('addPrivateDrinkBtn')) {
+    if (isAdmin) {
+      _DrinksUI.renderList();
+      Utils.el('addDrinkBtn')?.addEventListener('click', () => _DrinksUI.showForm(null));
+    } else {
       _PrivateDrinksUI.renderList();
-      Utils.el('addPrivateDrinkBtn').addEventListener('click', () => _PrivateDrinksUI.showForm(null));
+      Utils.el('addPrivateDrinkBtn')?.addEventListener('click', () => _PrivateDrinksUI.showForm(null));
     }
+  }
 
-    if (!isAdmin) return;
+  function openModal(content) {
+    const overlay = document.createElement('div');
+    overlay.className = 'sheet-overlay';
+    overlay.innerHTML = `<div class="drink-sheet open settings-modal">${content}</div>`;
+    overlay.addEventListener('click', (event) => {
+      if (event.target === overlay) overlay.remove();
+    });
+    document.body.appendChild(overlay);
+    return overlay;
+  }
 
-    /* Drinks manager — render list and wire add button */
-    _DrinksUI.renderList();
-    Utils.el('addDrinkBtn')?.addEventListener('click', () => _DrinksUI.showForm(null));
+  async function openEditProfileModal() {
+    const session = Auth.getSession() || {};
+    // Wait for UserData to finish syncing from Firestore before opening modal
+    if (window.UserData && !UserData.isReady()) {
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 100));
+        if (UserData.isReady()) break;
+      }
+    }
+    const state = UserData.getState();
+    const profile = state.userProfile || {};
+    console.log('[Profile] Opening modal. profile:', profile);
+    let overlay;
+    const getCurrentName = () => overlay?.querySelector('#profileNameInput')?.value?.trim() || session.displayName || profile.username || 'U';
+    const renderModalAvatar = (photoURL, revision = null) => (
+      window.Frames
+        ? Frames.avatarWithFrame(photoURL, getCurrentName(), 88, null, revision)
+        : (window.Profile ? Profile.avatarHTML(photoURL, getCurrentName(), 88, '', revision) : '')
+    );
+    overlay = openModal(`
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">Edit Profile</div>
+      <div class="settings-modal-grid">
+        <div class="settings-modal-avatar">
+          <div id="profileAvatarPreview">${renderModalAvatar(session.photoURL || profile.photoURL, session.photoVersion || session.savedAt || null)}</div>
+          <label class="file-input-label" for="avatarFileInput">📷 Choose Photo<input type="file" id="avatarFileInput" accept="image/*" class="file-input-hidden" /></label>
+          <button id="changeFrameBtn" type="button" class="file-input-label" style="background:rgba(139,92,246,0.15);border-color:rgba(139,92,246,0.4);color:#A78BFA;margin-top:2px;">🖼️ Change Frame</button>
+          <div id="avatarStatus" class="settings-inline-status"></div>
+        </div>
+        <label>
+          <span class="md-input-label">Username</span>
+          <input id="profileNameInput" class="md-input" value="${Utils.escapeHtml(session.displayName || profile.username || '')}" />
+        </label>
+        <label>
+          <span class="md-input-label">Date of Birth</span>
+          <div class="dob-picker-wrap">
+            <input id="profileDobInput" type="text" class="md-input dob-display-input"
+              value="${profile.dob ? (() => { const p=profile.dob.split('-'); const d=new Date(p[0],p[1]-1,p[2]); return d.getDate().toString().padStart(2,'0')+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]+' '+d.getFullYear(); })() : ''}"
+              placeholder="DD MMM YYYY" readonly style="cursor:pointer;" />
+            <span class="dob-cal-icon" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:18px;">📅</span>
+          </div>
+          <input id="profileDobRaw" type="hidden" value="${profile.dob || ''}" />
+        </label>
+        <label>
+          <span class="md-input-label">Height (cm)</span>
+          <input id="profileHeightInput" type="number" class="md-input" value="${profile.height || ''}" />
+        </label>
+        <label>
+          <span class="md-input-label">Gender</span>
+          <div class="styled-select-wrap" id="wrapGender">
+            <button type="button" class="styled-select-btn" data-target="ddGender">
+              <span class="styled-select-val">${profile.gender || 'Select one'}</span>
+              <svg class="styled-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="styled-select-dropdown" id="ddGender">
+              ${['','female','male','non-binary','other'].map(opt => `<div class="styled-select-opt${profile.gender===opt?' is-sel':''}" data-val="${opt}">${opt||'Select one'}</div>`).join('')}
+            </div>
+            <input type="hidden" id="profileGenderInput" value="${profile.gender || ''}"/>
+          </div>
+        </label>
+        <label>
+          <span class="md-input-label">Workout intensity</span>
+          <div class="styled-select-wrap" id="wrapModalIntensity">
+            <button type="button" class="styled-select-btn" data-target="ddModalIntensity">
+              <span class="styled-select-val">${profile.workoutIntensity || 'light'}</span>
+              <svg class="styled-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="styled-select-dropdown" id="ddModalIntensity">
+              ${['none','light','moderate','intense','athlete'].map(opt => `<div class="styled-select-opt${profile.workoutIntensity===opt?' is-sel':''}" data-val="${opt}">${opt}</div>`).join('')}
+            </div>
+            <input type="hidden" id="profileIntensityInput" value="${profile.workoutIntensity || 'light'}"/>
+          </div>
+        </label>
+        <label>
+          <span class="md-input-label">Workout frequency</span>
+          <div class="styled-select-wrap" id="wrapModalFrequency">
+            <button type="button" class="styled-select-btn" data-target="ddModalFrequency">
+              <span class="styled-select-val">${profile.workoutFrequency || 'moderate'}</span>
+              <svg class="styled-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="styled-select-dropdown" id="ddModalFrequency">
+              ${['rare','light','moderate','frequent','daily'].map(opt => `<div class="styled-select-opt${profile.workoutFrequency===opt?' is-sel':''}" data-val="${opt}">${opt}</div>`).join('')}
+            </div>
+            <input type="hidden" id="profileFrequencyInput" value="${profile.workoutFrequency || 'moderate'}"/>
+          </div>
+        </label>
+        <div class="settings-modal-actions">
+          <button id="profileCancelBtn" class="md-btn">Cancel</button>
+          <button id="profileSaveBtn" class="md-btn md-btn--filled">Save Changes</button>
+        </div>
+      </div>
+    `);
 
-    /* Clear today — only affects logged-in user's Firestore data */
-    Utils.el('resetTodayBtn')?.addEventListener('click', async () => {
-      if (!confirm("Clear ALL water data for today? Can't be undone.")) return;
-      setStatus('⏳ Clearing…', 'loading');
+    const refreshAvatarPreview = (photoURL, revision = null) => {
+      const preview = overlay.querySelector('#profileAvatarPreview');
+      if (!preview) return;
+      preview.innerHTML = renderModalAvatar(photoURL, revision);
+    };
+
+    overlay.querySelector('#profileCancelBtn')?.addEventListener('click', () => overlay.remove());
+
+    // Init styled selects immediately — DOM is ready since overlay was just built
+    initStyledSelects(overlay);
+
+    // ── Custom DOB Calendar ─────────────────────────────────────────────
+    (function initDobCalendar() {
+      const wrap        = overlay.querySelector('.dob-picker-wrap');
+      const hiddenInput = overlay.querySelector('#profileDobRaw');
+      const dispInput   = overlay.querySelector('.dob-display-input');
+      if (!wrap || !hiddenInput || !dispInput) return;
+
+      let calEl = null;
+      let viewYear, viewMonth;
+      const today = new Date();
+
+      const parseStored = () => { const v = hiddenInput.value; if (!v) return null; const p=v.split('-'); return new Date(p[0],Number(p[1])-1,p[2]); };
+      const months3 = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const months  = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+      const formatDisplay = (d) => d.getDate().toString().padStart(2,'0') + ' ' + months3[d.getMonth()] + ' ' + d.getFullYear();
+
+      const renderCalendar = () => {
+        const selected  = parseStored();
+        const firstDay  = new Date(viewYear, viewMonth, 1).getDay();
+        const daysInMon = new Date(viewYear, viewMonth + 1, 0).getDate();
+        const dayNames  = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+        let cells = '';
+        for (let i = 0; i < firstDay; i++) cells += '<span class="dob-cal-empty"></span>';
+        for (let d = 1; d <= daysInMon; d++) {
+          const date    = new Date(viewYear, viewMonth, d);
+          const isToday = date.toDateString() === today.toDateString();
+          const isSel   = selected && date.toDateString() === selected.toDateString();
+          const isFut   = date > today;
+          cells += `<span class="dob-cal-day${isToday?' dob-cal-today':''}${isSel?' dob-cal-sel':''}${isFut?' dob-cal-disabled':''}" data-d="${d}">${d}</span>`;
+        }
+        calEl.innerHTML = `
+          <div class="dob-cal-header">
+            <button class="dob-cal-nav" id="dobCalPrev">&#8249;</button>
+            <div class="dob-cal-title">
+              <div class="dob-month-wrap" id="dobMonthWrap">
+                <button class="dob-month-btn" id="dobMonthBtn">${months[viewMonth]} <span class="dob-chevron">▾</span></button>
+                <div class="dob-month-dropdown" id="dobMonthDropdown" style="display:none;">
+                  ${months.map((m,i)=>`<div class="dob-month-opt${i===viewMonth?' dob-month-sel':''}" data-m="${i}">${m}</div>`).join('')}
+                </div>
+              </div>
+              <input class="dob-year" type="number" value="${viewYear}" min="1900" max="${today.getFullYear()}"/>
+            </div>
+            <button class="dob-cal-nav" id="dobCalNext">&#8250;</button>
+          </div>
+          <div class="dob-cal-daynames">${dayNames.map(n=>`<span>${n}</span>`).join('')}</div>
+          <div class="dob-cal-grid">${cells}</div>
+          <div class="dob-cal-footer">
+            <button class="dob-btn-clear">Clear</button>
+            <button class="dob-btn-done">Done</button>
+          </div>`;
+
+        calEl.querySelector('#dobCalPrev').onclick = (e) => { e.stopPropagation(); viewMonth===0?(viewMonth=11,viewYear--):viewMonth--; renderCalendar(); };
+        calEl.querySelector('#dobCalNext').onclick = (e) => {
+          e.stopPropagation();
+          const nm = viewMonth===11?0:viewMonth+1, ny = viewMonth===11?viewYear+1:viewYear;
+          if (new Date(ny,nm,1)<=today){viewMonth=nm;viewYear=ny;renderCalendar();}
+        };
+        // Custom month dropdown
+        const monthBtn      = calEl.querySelector('#dobMonthBtn');
+        const monthDropdown = calEl.querySelector('#dobMonthDropdown');
+        const monthWrap     = calEl.querySelector('#dobMonthWrap');
+        if (monthBtn && monthDropdown) {
+          monthBtn.onclick = (e) => {
+            e.stopPropagation();
+            const isOpen = monthDropdown.style.display !== 'none';
+            monthDropdown.style.display = isOpen ? 'none' : 'block';
+          };
+          monthDropdown.querySelectorAll('.dob-month-opt').forEach(opt => {
+            opt.onclick = (e) => {
+              e.stopPropagation();
+              viewMonth = Number(opt.dataset.m);
+              monthDropdown.style.display = 'none';
+              renderCalendar();
+            };
+          });
+          // Close dropdown when clicking outside
+          setTimeout(() => {
+            document.addEventListener('click', function closeMonthDD(e) {
+              if (monthWrap && !monthWrap.contains(e.target)) {
+                monthDropdown.style.display = 'none';
+                document.removeEventListener('click', closeMonthDD);
+              }
+            });
+          }, 0);
+        }
+        calEl.querySelector('.dob-year').onchange = (e) => { const y=Number(e.target.value); if(y>=1900&&y<=today.getFullYear()){viewYear=y;renderCalendar();} };
+        calEl.querySelector('.dob-btn-clear').onclick = (e) => { e.stopPropagation(); hiddenInput.value=''; dispInput.value=''; closeCalendar(); };
+        calEl.querySelector('.dob-btn-done').onclick  = (e) => { e.stopPropagation(); closeCalendar(); };
+        calEl.querySelectorAll('.dob-cal-day:not(.dob-cal-disabled)').forEach(span => {
+          span.onclick = (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const d = new Date(viewYear, viewMonth, Number(span.dataset.d));
+            // Use local date parts to avoid UTC timezone offset shifting the date
+            const isoDate = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+            const displayStr = formatDisplay(d);
+            // Re-query to ensure we have live references
+            const _hidden = overlay.querySelector('#profileDobRaw');
+            const _disp   = overlay.querySelector('.dob-display-input');
+            if (_hidden) { _hidden.value = isoDate; console.log('[DOB] Set to:', isoDate, '| hidden.value now:', _hidden.value); }
+            if (_disp)   { _disp.value   = displayStr; }
+            closeCalendar();
+          };
+        });
+      };
+
+      const openCalendar = (e) => {
+        e.stopPropagation();
+        if (calEl) { closeCalendar(); return; }
+        const sel = parseStored() || new Date(today.getFullYear()-20, today.getMonth(), today.getDate());
+        viewYear=sel.getFullYear(); viewMonth=sel.getMonth();
+        calEl = document.createElement('div');
+        calEl.className = 'dob-calendar-popup';
+        wrap.style.position = 'relative';
+        wrap.appendChild(calEl);
+        renderCalendar();
+        // Delay outsideClick so this same click event doesn't immediately close the calendar
+        setTimeout(() => document.addEventListener('click', outsideClick), 200);
+      };
+
+      const closeCalendar = () => { if(calEl){calEl.remove();calEl=null;} document.removeEventListener('click',outsideClick); };
+      const outsideClick  = (e) => { if(!wrap.contains(e.target) && (!calEl || !calEl.contains(e.target))) closeCalendar(); };
+
+      dispInput.addEventListener('click', openCalendar);
+      wrap.querySelector('.dob-cal-icon').addEventListener('click', openCalendar);
+    })();
+    // ── End DOB Calendar ────────────────────────────────────────────────
+    overlay.querySelector('#profileNameInput')?.addEventListener('input', () => {
+      const activeSession = Auth.getSession() || session;
+      refreshAvatarPreview(activeSession.photoURL || profile.photoURL, activeSession.photoVersion || activeSession.savedAt || null);
+    });
+    overlay.querySelector('#changeFrameBtn')?.addEventListener('click', () => {
+      overlay.remove();
+      openFramePickerModal();
+    });
+    overlay.querySelector('#profileSaveBtn')?.addEventListener('click', async () => {
+      const saveBtn = overlay.querySelector('#profileSaveBtn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+
+      const displayName  = overlay.querySelector('#profileNameInput')?.value?.trim() || session.displayName || 'User';
+      const dobRaw       = overlay.querySelector('#profileDobRaw')?.value || '';
+      const age          = dobRaw ? Math.floor((Date.now() - ((p=>new Date(p[0],p[1]-1,p[2]))(dobRaw.split('-'))).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : null;
+      const height       = Number(overlay.querySelector('#profileHeightInput')?.value) || null;
+      const gender    = (overlay.querySelector('#profileGenderInput')?.value    || '').toLowerCase().trim();
+      const intensity = (overlay.querySelector('#profileIntensityInput')?.value || 'light').toLowerCase().trim();
+      const frequency = (overlay.querySelector('#profileFrequencyInput')?.value || 'moderate').toLowerCase().trim();
+      console.log('[Profile] Read values — gender:', gender, 'intensity:', intensity, 'frequency:', frequency);
+
       try {
-        await Storage.setTotalForDate(Utils.todayString(), 0);
-        setStatus('✅ Today\'s data cleared', 'success');
-        Utils.showToast('🗑 Today\'s data cleared');
-        HomeScreen.updateUI();
+        // Save display name to auth profile (best-effort — don't block on failure)
+        try { await Profile.saveProfile({ displayName }); } catch(e) { console.warn('Profile.saveProfile:', e.message); }
+
+        // Save all fields to UserData (localStorage + Firestore)
+        console.log('[Profile] Saving:', { displayName, age, height, gender, intensity, frequency });
+        await UserData.saveProfile({
+          username: displayName,
+          age, height, gender,
+          dob: dobRaw || null,
+          workoutIntensity: intensity,
+          workoutFrequency: frequency,
+          surveyData: { age, height, gender, dob: dobRaw || null },
+        });
+        console.log('[Profile] Saved. State now:', UserData.getState().userProfile);
+
+
+        if (window.App) App.updateHeaderAvatar(Auth.getSession());
+        if (window.HomeScreen) HomeScreen.updateUI();
+        Utils.showToast('✅ Profile updated!');
+        overlay.remove();
+        _patchMetaLine();
+        renderForRole();
       } catch (e) {
-        setStatus('❌ ' + e.message, 'error');
+        Utils.showToast('❌ ' + e.message);
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Changes';
       }
     });
 
-    /* Reset all — only affects logged-in user's Firestore data */
-    Utils.el('resetAllBtn')?.addEventListener('click', async () => {
-      if (!confirm('⚠️ Delete ALL your water intake history permanently?')) return;
-      if (!confirm('Last chance — are you absolutely sure?')) return;
-      setStatus('⏳ Resetting…', 'loading');
+    overlay.querySelector('#avatarFileInput')?.addEventListener('change', async function onAvatarChange() {
+      const file = this.files?.[0];
+      if (!file) return;
+      const status = overlay.querySelector('#avatarStatus');
+      status.textContent = 'Preparing image...';
       try {
-        await Firebase.resetAllData();
-        setStatus('✅ Your history wiped', 'success');
-        Utils.showToast('💣 All your data wiped');
-        HomeScreen.updateUI();
+        const previewSrc = window.Profile?.readFileAsDataURL
+          ? await Profile.readFileAsDataURL(file)
+          : await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onerror = () => reject(new Error('Could not read the selected image.'));
+              reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+              reader.readAsDataURL(file);
+            });
+        if (previewSrc) refreshAvatarPreview(previewSrc, Date.now());
+        status.textContent = 'Uploading...';
+        const url = await Profile.uploadPhoto(file);
+        await Profile.saveProfile({ photoURL: url });
+        await UserData.saveProfile({ photoURL: url });
+        const nextSession = Auth.getSession() || session;
+        refreshAvatarPreview(url, nextSession.photoVersion || nextSession.savedAt || null);
+        if (window.App) App.updateHeaderAvatar(Auth.getSession());
+        status.textContent = 'Photo updated.';
+        Utils.showToast('Profile photo updated.');
+        renderForRole();
       } catch (e) {
-        setStatus('❌ ' + e.message, 'error');
-        Utils.showToast('❌ Reset failed: ' + e.message);
+        status.textContent = e.message;
+      } finally {
+        this.value = '';
       }
     });
-  };
+  }
 
-  const setStatus = (msg, type) => {
-    const el = Utils.el('dangerStatus');
-    if (!el) return;
-    const colors = { success: '#137333', error: '#D93025', loading: '#E37400' };
-    el.textContent = msg;
-    el.style.color = colors[type] || '#202124';
-  };
+  function openFramePickerModal() {
+    if (!window.Frames) { Utils.showToast('Frames not loaded'); return; }
 
-  const init = () => { Router.on('settings', renderForRole); };
-  return { init, renderForRole };
+    const overlay = openModal(`
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">🖼️ Your Frames</div>
+      <div style="font-size:13px;color:var(--md-on-surface-med);margin-bottom:14px;">Tap to equip. Buy more in the Shop.</div>
+      <div id="framePickerGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(95px,1fr));gap:8px;margin-bottom:16px;">
+        <div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--md-on-surface-med);">⏳ Loading frames…</div>
+      </div>
+      <button id="framePickerDone" class="md-btn md-btn--filled" style="width:100%;">Done</button>
+    `);
+    overlay.querySelector('#framePickerDone')?.addEventListener('click', () => overlay.remove());
+
+    const populate = () => {
+      const grid = overlay.querySelector('#framePickerGrid');
+      if (!grid || !overlay.isConnected) return;
+      grid.innerHTML = _buildFramePickerGrid();
+      _bindFramePickerTiles(overlay);
+    };
+
+    // Force reload from Firestore, with retry if Firebase not ready
+    const tryLoad = async () => {
+      if (!window.firebase || !firebase.apps?.length) {
+        setTimeout(tryLoad, 400);
+        return;
+      }
+      await Frames.reloadCatalog();
+      populate();
+    };
+    tryLoad();
+  }
+
+  function _buildFramePickerGrid() {
+    const catalog = window.Frames?.CATALOG || [];
+    const fbEmail = (window.firebase?.auth?.()?.currentUser?.email || '').toLowerCase();
+    const sesEmail = (window.Auth?.getSession?.()?.email || '').toLowerCase();
+    const sesRole  = (window.Auth?.getSession?.()?.role  || '').toLowerCase();
+    const isAdm = sesRole==='admin' || sesRole==='maggie' ||
+      fbEmail==='jindalmayank2604@gmail.com' || sesEmail==='jindalmayank2604@gmail.com' ||
+      fbEmail==='mayankjindal2604@gmail.com' || sesEmail==='mayankjindal2604@gmail.com';
+    const visible = isAdm ? catalog : catalog.filter(f => window.Frames?.isPurchased?.(f.id));
+
+    const curEq = window.Frames?.getEquipped?.() || null;
+
+    const tileParts = visible.map(f => {
+      const isEq = curEq === f.id;
+      const overlayStyle = window.Frames?.getFrameOverlayStyle?.(f.id, 52, 'object-fit:contain;z-index:2;pointer-events:none;') || '';
+      return `<div data-frame-pick="${f.id}" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 8px;border-radius:14px;cursor:pointer;border:2px solid ${isEq?'var(--md-primary)':'var(--md-outline)'};background:${isEq?'rgba(26,115,232,0.12)':'var(--md-surface-2)'};transition:all 0.15s;position:relative;">
+        <div style="position:relative;width:52px;height:52px;flex-shrink:0;">
+          <div style="position:absolute;top:0;left:0;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#1a73e8,#0d47a1);display:flex;align-items:center;justify-content:center;font-size:20px;z-index:1;overflow:hidden;pointer-events:none;">💧</div>
+          <img src="${f.file}" style="${overlayStyle}" onerror="this.style.display='none'" />
+        </div>
+        <div style="font-size:11px;font-weight:700;color:var(--md-on-background);text-align:center;pointer-events:none;">${f.emoji||'🖼️'} ${f.name}</div>
+        ${isEq?'<div style="font-size:9px;color:var(--md-primary);font-weight:800;pointer-events:none;">EQUIPPED</div>':''}
+      </div>`;
+    });
+
+    const noneTile = `<div data-frame-pick="none" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 8px;border-radius:14px;cursor:pointer;border:2px solid ${!curEq?'var(--md-primary)':'var(--md-outline)'};background:${!curEq?'rgba(26,115,232,0.12)':'var(--md-surface-2)'};transition:all 0.15s;">
+      <div style="width:52px;height:52px;border-radius:50%;background:var(--md-surface-3);display:flex;align-items:center;justify-content:center;font-size:22px;pointer-events:none;">🚫</div>
+      <div style="font-size:11px;font-weight:700;color:var(--md-on-background);pointer-events:none;">None</div>
+      ${!curEq?'<div style="font-size:9px;color:var(--md-primary);font-weight:800;pointer-events:none;">ACTIVE</div>':''}
+    </div>`;
+
+    const empty = visible.length === 0
+      ? '<div style="grid-column:1/-1;text-align:center;color:var(--md-on-surface-med);font-size:13px;padding:16px;">No frames yet.<br>Visit Shop to buy! 🪙</div>'
+      : '';
+
+    return tileParts.join('') + noneTile + empty;
+  }
+
+
+  function _bindFramePickerTiles(overlay) {
+    overlay.querySelectorAll('[data-frame-pick]').forEach(tile => {
+      tile.addEventListener('click', async () => {
+        const id = tile.dataset.framePick;
+        try {
+          await Frames.equip(id === 'none' ? null : id);
+          if (window.App) App.updateHeaderAvatar?.(Auth.getSession());
+          const grid = overlay.querySelector('#framePickerGrid');
+          if (grid) { grid.innerHTML = _buildFramePickerGrid(); _bindFramePickerTiles(overlay); }
+        } catch(e) { Utils.showToast('❌ ' + e.message); }
+      });
+    });
+  }
+
+  function _openFramePickerModal(ud) {
+    // Legacy - redirects to new implementation
+    openFramePickerModal();
+  }
+
+
+  function openFamilyManagerModal() {
+    const state = UserData.getState();
+    const session = Auth.getSession() || {};
+    const uid = Firebase.getUserId() || session.uid || '';
+    // Generate a shareable invite link using the user's UID
+    const baseUrl = window.location.origin + window.location.pathname;
+    const familyLink = uid ? `${baseUrl}?joinFamily=${uid}` : null;
+
+    const overlay = openModal(`
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">👨‍👩‍👧 Family Group</div>
+      <div class="settings-modal-grid">
+
+        ${familyLink ? `
+        <div class="family-invite-box">
+          <div class="md-input-label">🔗 Your Family Invite Link</div>
+          <div class="family-invite-link" id="familyLinkDisplay">${familyLink}</div>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button id="copyFamilyLink" class="md-btn md-btn--filled" style="flex:1;">📋 Copy Link</button>
+            <button id="shareFamilyLink" class="md-btn" style="flex:1;">📤 Share</button>
+          </div>
+          <div class="settings-section-sub" style="margin-top:6px;">Send this link to friends or family. When they open it, they'll be added to your group automatically.</div>
+        </div>
+        ` : '<div class="settings-section-sub">Log in to generate your family invite link.</div>'}
+
+        <div style="border-top:1px solid var(--md-outline);padding-top:14px;margin-top:4px;">
+          <div class="md-input-label">Or add by Gmail ID directly</div>
+          <input id="familyModalInput" class="md-input" placeholder="member@gmail.com" style="margin-top:6px;" />
+          <button id="familyModalSave" class="md-btn md-btn--filled md-btn--full" style="margin-top:8px;">+ Add to Family</button>
+        </div>
+
+        ${(state.familyMembers || []).length > 0 ? `
+        <div>
+          <div class="md-input-label">Current Members (${(state.familyMembers||[]).length})</div>
+          <div class="family-roster">${(state.familyMembers || []).map((email) => `<span class="family-roster__chip">${Utils.escapeHtml(email)}</span>`).join('')}</div>
+        </div>` : ''}
+      </div>
+    `);
+
+    overlay.querySelector('#copyFamilyLink')?.addEventListener('click', () => {
+      navigator.clipboard.writeText(familyLink).then(() => Utils.showToast('✅ Link copied!')).catch(() => {
+        // Fallback
+        const el = document.createElement('textarea');
+        el.value = familyLink; document.body.appendChild(el);
+        el.select(); document.execCommand('copy'); el.remove();
+        Utils.showToast('✅ Link copied!');
+      });
+    });
+
+    overlay.querySelector('#shareFamilyLink')?.addEventListener('click', () => {
+      if (navigator.share) {
+        navigator.share({ title: 'Join my hydration family!', text: 'Track hydration together — click to join my family group.', url: familyLink });
+      } else {
+        Utils.showToast('Copy the link above and send it manually.');
+      }
+    });
+
+    overlay.querySelector('#familyModalSave')?.addEventListener('click', async () => {
+      const email = overlay.querySelector('#familyModalInput')?.value?.trim() || '';
+      if (!email) { Utils.showToast('Enter an email address.'); return; }
+      try {
+        await UserData.addFamilyMember(email);
+        Utils.showToast('✅ Family member added.');
+        overlay.remove();
+        renderForRole();
+      } catch (e) { Utils.showToast(e.message); }
+    });
+  }
+
+  function openGoalEditModal() {
+    const current = window.UserData ? UserData.getState().hydrationGoal : 3000;
+    const overlay = openModal(`
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">Edit Daily Goal</div>
+      <div style="padding:0 4px 8px;">
+        <p style="font-size:13px;color:var(--md-on-surface-variant,rgba(255,255,255,0.6));margin:0 0 16px;">
+          Set a custom hydration goal for today. This overrides the auto-calculated goal.<br>
+          <strong style="color:#a78bfa;">You can only change this once per day.</strong>
+        </p>
+        <label>
+          <span class="md-input-label">Daily Goal (ml)</span>
+          <input id="goalEditInput" type="number" class="md-input" value="${current}" min="500" max="6000" step="50" />
+        </label>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+          ${[1500,2000,2500,3000,3500,4000].map(v =>
+            '<button class="goal-preset-btn" data-val="'+v+'">'+v+'ml</button>'
+          ).join('')}
+        </div>
+        <div class="settings-modal-actions" style="margin-top:16px;">
+          <button id="goalEditCancel" class="md-btn">Cancel</button>
+          <button id="goalEditSave" class="md-btn md-btn--filled">Save Goal</button>
+        </div>
+      </div>
+    `);
+
+    overlay.querySelectorAll('.goal-preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        overlay.querySelector('#goalEditInput').value = btn.dataset.val;
+        overlay.querySelectorAll('.goal-preset-btn').forEach(b => b.classList.remove('is-sel'));
+        btn.classList.add('is-sel');
+      });
+    });
+
+    overlay.querySelector('#goalEditCancel')?.addEventListener('click', () => overlay.remove());
+    overlay.querySelector('#goalEditSave')?.addEventListener('click', async () => {
+      const val = parseInt(overlay.querySelector('#goalEditInput')?.value, 10);
+      if (!val || val < 500 || val > 6000) { Utils.showToast('❌ Enter a value between 500–6000 ml'); return; }
+      const today = new Date().toISOString().slice(0,10);
+      localStorage.setItem('wt_goal_edit_v1', JSON.stringify({ date: today, goal: val }));
+      await UserData.save({ hydrationGoal: val });
+      Utils.showToast('✅ Goal set to ' + val + ' ml for today');
+      overlay.remove();
+      renderForRole();
+      if (window.HomeScreen) HomeScreen.updateUI();
+    });
+  }
+
+  function initStyledSelects(root) {
+    (root || document).querySelectorAll('.styled-select-wrap').forEach(wrap => {
+      if (wrap._ssInit) return;
+      wrap._ssInit = true;
+
+      const btn    = wrap.querySelector('.styled-select-btn');
+      const dd     = wrap.querySelector('.styled-select-dropdown');
+      const hidden = wrap.querySelector('input[type=hidden]');
+      const val    = wrap.querySelector('.styled-select-val');
+      if (!btn || !dd || !hidden) return;
+
+      // Toggle open
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const opening = !dd.classList.contains('is-open');
+        // Close everything first
+        document.querySelectorAll('.styled-select-dropdown.is-open').forEach(d => {
+          d.classList.remove('is-open');
+          d.closest('.styled-select-wrap')?._ssBtn?.classList.remove('is-active');
+        });
+        if (opening) { dd.classList.add('is-open'); btn.classList.add('is-active'); }
+      });
+      wrap._ssBtn = btn;
+
+      // Select option — use both mousedown AND click for maximum compatibility
+      dd.querySelectorAll('.styled-select-opt').forEach(opt => {
+        const selectOpt = (e) => {
+          e.stopPropagation();
+          if (e.type === 'mousedown') e.preventDefault();
+          const v = opt.dataset.val;
+          // Update hidden input
+          hidden.value = v;
+          // Update display
+          val.textContent = v || opt.textContent.trim();
+          // Update selected state
+          dd.querySelectorAll('.styled-select-opt').forEach(o => o.classList.remove('is-sel'));
+          opt.classList.add('is-sel');
+          // Close
+          dd.classList.remove('is-open');
+          btn.classList.remove('is-active');
+          // Verify write
+          console.log('[Select] Set', hidden.id, '=', hidden.value);
+        };
+        opt.addEventListener('mousedown', selectOpt);
+        opt.addEventListener('click', selectOpt);
+      });
+    });
+
+    if (!window._ssGlobalClose) {
+      window._ssGlobalClose = true;
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.styled-select-wrap') && !e.target.closest('.dob-picker-wrap') && !e.target.closest('.dob-calendar-popup')) {
+          document.querySelectorAll('.styled-select-dropdown.is-open').forEach(d => {
+            d.classList.remove('is-open');
+            d.closest('.styled-select-wrap')?._ssBtn?.classList.remove('is-active');
+          });
+        }
+      });
+    }
+  }
+
+  function _buildMetaLine(p) {
+    let ageStr = '— yrs';
+    if (p.dob) {
+      const _pts = p.dob.split('-');
+      const _d   = new Date(_pts[0], Number(_pts[1])-1, _pts[2]);
+      const _age = Math.floor((Date.now() - _d.getTime()) / (365.25*24*60*60*1000));
+      if (!isNaN(_age) && _age > 0) ageStr = _age + ' yrs';
+    } else if (p.age) {
+      ageStr = p.age + ' yrs';
+    }
+    const htStr  = p.height ? p.height + ' cm' : '— cm';
+    const genStr = p.gender ? (p.gender.charAt(0).toUpperCase() + p.gender.slice(1)) : 'Unset';
+    return ageStr + ' • ' + htStr + ' • ' + genStr;
+  }
+
+  function _patchMetaLine() {
+    const el = document.getElementById('profileMetaLine');
+    if (el) {
+      // Element exists — patch it directly
+      const up = window.UserData ? UserData.getState().userProfile : {};
+      el.textContent = _buildMetaLine(up);
+    } else {
+      // Element doesn't exist — trigger full re-render if settings screen is mounted
+      const settingsRoot = Utils.el('settings-root');
+      if (settingsRoot && settingsRoot.children.length > 0) {
+        renderForRole();
+      }
+    }
+  }
+
+  const init = () => {
+    Router.on('settings', () => { renderForRole(); setTimeout(() => initStyledSelects(), 50); });
+  };
+  return { init, renderForRole, render, _buildMetaLine, _patchMetaLine };
 })();
 
-/* ══════════════════════════════════════════════════════════════
-   PRO UPGRADE — Razorpay-ready hook
-   ──────────────────────────────────────────────────────────────
-   When you're ready to launch Pro, replace this function with:
-
-   SettingsScreen._handleProUpgrade = async () => {
-     const session = Auth.getSession();
-     const options = {
-       key: 'rzp_live_XXXXXXXXX',      // ← your Razorpay live key
-       amount: 9900,                    // ₹99 in paise
-       currency: 'INR',
-       name: 'HydrationApp',
-       description: 'Pro — 450 scans/month',
-       image: 'assets/icon-192.png',
-       prefill: { email: session?.email || '' },
-       theme: { color: '#FBBC04' },
-       handler: async (response) => {
-         // Payment successful — promote user to Pro
-         const uid = Firebase.getUserId();
-         const email = (session?.email || '').toLowerCase();
-         await firebase.firestore().collection('Roles').doc(email)
-           .set({ role: 'pro' }, { merge: true });
-         await firebase.firestore().collection('users').doc(uid)
-           .set({ role: 'pro' }, { merge: true });
-         Auth.saveSession({ ...session, role: 'pro' }, true);
-         Utils.showToast('🎉 Welcome to Pro!');
-         SettingsScreen.renderForRole();
-       },
-     };
-     const rzp = new window.Razorpay(options);
-     rzp.open();
-   };
-
-   Also add this script to index.html before app.js:
-   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-   ══════════════════════════════════════════════════════════════ */
 SettingsScreen._handleProUpgrade = () => {
-  Utils.showToast('✨ Pro is coming soon — stay tuned!');
+  Utils.showToast('Pro upgrade flow is still coming soon.');
 };
 
-/* ══ Drinks manager helpers ══ */
 const _DrinksUI = {};
 
 _DrinksUI.renderList = function renderDrinksList() {
   const el = Utils.el('drinksList');
   if (!el) return;
   const drinks = Drinks.getAll();
-  el.innerHTML = drinks.map(d => `
+  el.innerHTML = drinks.map((d) => `
     <div class="drink-row" data-id="${d.id}">
       <span class="drink-row-emoji">${d.emoji}</span>
       <div class="drink-row-info">
         <div class="drink-row-name">${d.name}</div>
         <div class="drink-row-pct">${d.hydration >= 0 ? d.hydration + '% hydration' : d.hydration + '% (dehydrating)'}</div>
       </div>
-      ${d.locked
-        ? '<span class="drink-row-badge">built-in</span>'
-        : `<button class="drink-row-edit" data-id="${d.id}">Edit</button>
-           <button class="drink-row-del"  data-id="${d.id}">✕</button>`
-      }
+      ${d.locked ? '<span class="drink-row-badge">built-in</span>' : `<button class="drink-row-edit" data-id="${d.id}">Edit</button><button class="drink-row-del" data-id="${d.id}">×</button>`}
     </div>
   `).join('');
 
-  el.querySelectorAll('.drink-row-edit').forEach(btn => {
-    btn.addEventListener('click', () => _DrinksUI.showForm(Drinks.getById(btn.dataset.id)));
-  });
-  el.querySelectorAll('.drink-row-del').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      if (!confirm('Delete this drink type?')) return;
-      await Drinks.remove(btn.dataset.id);
-      _DrinksUI.renderList();
-      Utils.showToast('🗑 Drink removed');
-    });
-  });
+  el.querySelectorAll('.drink-row-edit').forEach((btn) => btn.addEventListener('click', () => _DrinksUI.showForm(Drinks.getById(btn.dataset.id))));
+  el.querySelectorAll('.drink-row-del').forEach((btn) => btn.addEventListener('click', async () => {
+    if (!confirm('Delete this drink type?')) return;
+    await Drinks.remove(btn.dataset.id);
+    _DrinksUI.renderList();
+  }));
 };
 
 _DrinksUI.showForm = function showDrinkForm(existing) {
@@ -562,191 +996,91 @@ _DrinksUI.showForm = function showDrinkForm(existing) {
   const overlay = document.createElement('div');
   overlay.className = 'sheet-overlay';
   overlay.innerHTML = `
-    <div class="drink-sheet open" style="padding-bottom:24px;">
+    <div class="drink-sheet open settings-modal">
       <div class="sheet-handle"></div>
       <div class="sheet-title">${isEdit ? 'Edit Drink' : 'New Drink Type'}</div>
-      <div style="display:flex;flex-direction:column;gap:14px;margin-top:8px;">
-
-        <div>
-          <label style="font-size:12px;color:var(--md-on-surface-med);font-weight:600;">EMOJI</label>
-          <input class="md-input" id="dfEmoji" type="text" maxlength="2"
-            value="${existing?.emoji || '🥤'}" style="margin-top:6px;font-size:24px;text-align:center;width:60px;" />
+      <div class="settings-modal-grid">
+        <label><span class="md-input-label">Emoji</span><input class="md-input" id="dfEmoji" maxlength="2" value="${existing?.emoji || '🥤'}"></label>
+        <label><span class="md-input-label">Name</span><input class="md-input" id="dfName" maxlength="20" value="${existing?.name || ''}"></label>
+        <label><span class="md-input-label">Hydration %</span><input class="md-input" id="dfHydration" type="number" min="-50" max="100" value="${existing?.hydration ?? 90}"></label>
+        <div class="settings-modal-actions">
+          <button id="dfCancel" class="md-btn">Cancel</button>
+          <button id="dfSave" class="md-btn md-btn--filled">${isEdit ? 'Save' : 'Add Drink'}</button>
         </div>
-
-        <div>
-          <label style="font-size:12px;color:var(--md-on-surface-med);font-weight:600;">NAME</label>
-          <input class="md-input" id="dfName" type="text" maxlength="20"
-            value="${existing?.name || ''}" placeholder="e.g. Green Tea" style="margin-top:6px;" />
-        </div>
-
-        <div>
-          <label style="font-size:12px;color:var(--md-on-surface-med);font-weight:600;">
-            HYDRATION: <span id="dfPctLabel">${existing?.hydration ?? 90}%</span>
-          </label>
-          <input type="range" id="dfHydration" min="-50" max="100" step="5"
-            value="${existing?.hydration ?? 90}" style="width:100%;margin-top:8px;" />
-          <div style="font-size:11px;color:var(--md-on-surface-low);margin-top:4px;" id="dfHintText">
-            ${_DrinksUI.hydrationHint(existing?.hydration ?? 90)}
-          </div>
-        </div>
-
-      </div>
-      <div style="display:flex;gap:10px;margin-top:20px;">
-        <button class="md-btn md-btn--full" id="dfCancel"
-          style="border-radius:12px;padding:12px;flex:1;">Cancel</button>
-        <button class="md-btn md-btn--filled md-btn--full" id="dfSave"
-          style="border-radius:12px;padding:12px;flex:2;">
-          ${isEdit ? '💾 Save Changes' : '+ Add Drink'}
-        </button>
       </div>
     </div>
   `;
   document.body.appendChild(overlay);
-
-  const slider = overlay.querySelector('#dfHydration');
-  slider.addEventListener('input', () => {
-    overlay.querySelector('#dfPctLabel').textContent  = slider.value + '%';
-    overlay.querySelector('#dfHintText').textContent  = _DrinksUI.hydrationHint(parseInt(slider.value));
-  });
-
   overlay.querySelector('#dfCancel').addEventListener('click', () => overlay.remove());
-
   overlay.querySelector('#dfSave').addEventListener('click', async () => {
-    const emoji     = overlay.querySelector('#dfEmoji').value.trim() || '🥤';
-    const name      = overlay.querySelector('#dfName').value.trim();
-    const hydration = parseInt(slider.value);
-    if (!name) { Utils.showToast('⚠️ Enter a drink name'); return; }
-    const btn = overlay.querySelector('#dfSave');
-    btn.textContent = '⏳ Saving…';
-    btn.disabled = true;
-    try {
-      if (isEdit) {
-        await Drinks.update(existing.id, { emoji, name, hydration });
-        Utils.showToast('✅ Drink updated');
-      } else {
-        await Drinks.add({ emoji, name, hydration, locked: false });
-        Utils.showToast('✅ Drink added');
-      }
-    } catch (e) {
-      Utils.showToast('⚠️ Saved locally (Firestore: ' + e.message + ')');
-    }
+    const emoji = overlay.querySelector('#dfEmoji').value.trim() || '🥤';
+    const name = overlay.querySelector('#dfName').value.trim();
+    const hydration = parseInt(overlay.querySelector('#dfHydration').value, 10);
+    if (!name) { Utils.showToast('Enter a drink name.'); return; }
+    if (isEdit) await Drinks.update(existing.id, { emoji, name, hydration });
+    else await Drinks.add({ emoji, name, hydration, locked: false });
     overlay.remove();
     _DrinksUI.renderList();
   });
 };
 
-_DrinksUI.hydrationHint = function hydrationHint(pct) {
-  if (pct === 100) return '100% — pure hydration (water)';
-  if (pct >= 80)   return 'Mostly hydrating';
-  if (pct >= 50)   return 'Partially hydrating';
-  if (pct >= 0)    return 'Low hydration value';
-  return 'Dehydrating — will subtract from your total';
-};
-
-/* ══ Private Drinks UI (per-user) ══ */
 const _PrivateDrinksUI = {};
 
-_PrivateDrinksUI.renderList = function() {
+_PrivateDrinksUI.renderList = function renderPrivateDrinks() {
   const el = Utils.el('privateDrinksList');
   if (!el) return;
   const drinks = Drinks.getPrivateAll();
   if (!drinks.length) {
-    el.innerHTML = '<div style="font-size:13px;color:var(--md-on-surface-med);padding:8px 0;">No custom drinks yet. Add one!</div>';
+    el.innerHTML = '<div class="settings-coming-soon">No custom drinks yet. Add one to personalize your drink sheet.</div>';
     return;
   }
-  el.innerHTML = drinks.map(d => `
+  el.innerHTML = drinks.map((d) => `
     <div class="drink-row" data-id="${d.id}">
       <span class="drink-row-emoji">${d.emoji}</span>
       <div class="drink-row-info">
-        <div class="drink-row-name">${Utils.escapeHtml(d.name)} <span style="font-size:10px;background:#E8F0FE;color:#1A73E8;padding:1px 6px;border-radius:4px;">Private</span></div>
+        <div class="drink-row-name">${Utils.escapeHtml(d.name)}</div>
         <div class="drink-row-pct">${d.hydration >= 0 ? d.hydration + '% hydration' : d.hydration + '% (dehydrating)'}</div>
       </div>
       <button class="drink-row-edit" data-id="${d.id}">Edit</button>
-      <button class="drink-row-del" data-id="${d.id}">✕</button>
+      <button class="drink-row-del" data-id="${d.id}">×</button>
     </div>
   `).join('');
-
-  el.querySelectorAll('.drink-row-edit').forEach(btn => {
-    btn.addEventListener('click', () => _PrivateDrinksUI.showForm(Drinks.getPrivateAll().find(d => d.id === btn.dataset.id)));
-  });
-  el.querySelectorAll('.drink-row-del').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      if (!confirm('Delete this drink?')) return;
-      await Drinks.removePrivate(btn.dataset.id);
-      _PrivateDrinksUI.renderList();
-      Utils.showToast('🗑 Custom drink removed');
-    });
-  });
+  el.querySelectorAll('.drink-row-edit').forEach((btn) => btn.addEventListener('click', () => _PrivateDrinksUI.showForm(Drinks.getPrivateAll().find((drink) => drink.id === btn.dataset.id))));
+  el.querySelectorAll('.drink-row-del').forEach((btn) => btn.addEventListener('click', async () => {
+    if (!confirm('Delete this custom drink?')) return;
+    await Drinks.removePrivate(btn.dataset.id);
+    _PrivateDrinksUI.renderList();
+  }));
 };
 
-_PrivateDrinksUI.showForm = function(existing) {
+_PrivateDrinksUI.showForm = function showPrivateDrinkForm(existing) {
   const isEdit = !!existing;
   const overlay = document.createElement('div');
   overlay.className = 'sheet-overlay';
   overlay.innerHTML = `
-    <div class="drink-sheet open" style="padding-bottom:24px;">
+    <div class="drink-sheet open settings-modal">
       <div class="sheet-handle"></div>
       <div class="sheet-title">${isEdit ? 'Edit My Drink' : 'New Private Drink'}</div>
-      <div style="background:#E8F0FE;border-radius:10px;padding:8px 12px;margin-bottom:14px;font-size:12px;color:#1A73E8;">
-        🔒 Only visible to you — not shared with other users
-      </div>
-      <div style="display:flex;flex-direction:column;gap:14px;margin-top:8px;">
-        <div>
-          <label style="font-size:12px;color:var(--md-on-surface-med);font-weight:600;">EMOJI</label>
-          <input class="md-input" id="pdfEmoji" type="text" maxlength="2"
-            value="${existing?.emoji || '🥤'}" style="margin-top:6px;font-size:24px;text-align:center;width:60px;" />
+      <div class="settings-modal-grid">
+        <label><span class="md-input-label">Emoji</span><input class="md-input" id="pdfEmoji" maxlength="2" value="${existing?.emoji || '🥤'}"></label>
+        <label><span class="md-input-label">Name</span><input class="md-input" id="pdfName" maxlength="20" value="${existing?.name || ''}"></label>
+        <label><span class="md-input-label">Hydration %</span><input class="md-input" id="pdfHydration" type="number" min="-50" max="100" value="${existing?.hydration ?? 90}"></label>
+        <div class="settings-modal-actions">
+          <button id="pdfCancel" class="md-btn">Cancel</button>
+          <button id="pdfSave" class="md-btn md-btn--filled">${isEdit ? 'Save' : 'Add Drink'}</button>
         </div>
-        <div>
-          <label style="font-size:12px;color:var(--md-on-surface-med);font-weight:600;">NAME</label>
-          <input class="md-input" id="pdfName" type="text" maxlength="20"
-            value="${existing?.name || ''}" placeholder="e.g. My Protein Shake" style="margin-top:6px;" />
-        </div>
-        <div>
-          <label style="font-size:12px;color:var(--md-on-surface-med);font-weight:600;">
-            HYDRATION: <span id="pdfPctLabel">${existing?.hydration ?? 90}%</span>
-          </label>
-          <input type="range" id="pdfHydration" min="-50" max="100" step="5"
-            value="${existing?.hydration ?? 90}" style="width:100%;margin-top:8px;" />
-          <div style="font-size:11px;color:var(--md-on-surface-low);margin-top:4px;" id="pdfHintText">
-            ${_DrinksUI.hydrationHint(existing?.hydration ?? 90)}
-          </div>
-        </div>
-      </div>
-      <div style="display:flex;gap:10px;margin-top:20px;">
-        <button class="md-btn md-btn--full" id="pdfCancel" style="border-radius:12px;padding:12px;flex:1;">Cancel</button>
-        <button class="md-btn md-btn--filled md-btn--full" id="pdfSave" style="border-radius:12px;padding:12px;flex:2;">
-          ${isEdit ? '💾 Save Changes' : '+ Add Drink'}
-        </button>
       </div>
     </div>
   `;
   document.body.appendChild(overlay);
-
-  const slider = overlay.querySelector('#pdfHydration');
-  slider.addEventListener('input', () => {
-    overlay.querySelector('#pdfPctLabel').textContent = slider.value + '%';
-    overlay.querySelector('#pdfHintText').textContent = _DrinksUI.hydrationHint(parseInt(slider.value));
-  });
-
   overlay.querySelector('#pdfCancel').addEventListener('click', () => overlay.remove());
   overlay.querySelector('#pdfSave').addEventListener('click', async () => {
-    const emoji     = overlay.querySelector('#pdfEmoji').value.trim() || '🥤';
-    const name      = overlay.querySelector('#pdfName').value.trim();
-    const hydration = parseInt(slider.value);
-    if (!name) { Utils.showToast('⚠️ Enter a drink name'); return; }
-    const btn = overlay.querySelector('#pdfSave');
-    btn.textContent = '⏳ Saving…'; btn.disabled = true;
-    try {
-      if (isEdit) {
-        await Drinks.updatePrivate(existing.id, { emoji, name, hydration });
-        Utils.showToast('✅ Drink updated');
-      } else {
-        await Drinks.addPrivate({ emoji, name, hydration });
-        Utils.showToast('✅ Private drink added');
-      }
-    } catch(e) {
-      Utils.showToast('⚠️ ' + e.message);
-    }
+    const emoji = overlay.querySelector('#pdfEmoji').value.trim() || '🥤';
+    const name = overlay.querySelector('#pdfName').value.trim();
+    const hydration = parseInt(overlay.querySelector('#pdfHydration').value, 10);
+    if (!name) { Utils.showToast('Enter a drink name.'); return; }
+    if (isEdit) await Drinks.updatePrivate(existing.id, { emoji, name, hydration });
+    else await Drinks.addPrivate({ emoji, name, hydration });
     overlay.remove();
     _PrivateDrinksUI.renderList();
   });

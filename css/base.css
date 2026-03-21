@@ -10,6 +10,7 @@
 
 html { font-size: 16px; scroll-behavior: smooth; }
 
+html { overflow-x: hidden; }
 body {
   font-family: var(--font-body);
   background: var(--md-background);
@@ -25,12 +26,13 @@ body {
    Desktop 1024px+: content-col becomes a real flex column, offset
    right of the fixed sidebar; header+main fill it fully (no auto margin). ── */
 
-.content-col { display: contents; }
+/* Mobile: content-col is transparent wrapper */
+.content-col { display: block; }
 
-/* Mobile: centered in viewport. Desktop: responsive.css overrides via !important */
-.app-header { max-width: var(--max-width); margin-left: auto; margin-right: auto; width: 100%; box-sizing: border-box; }
-.app-main   { max-width: var(--max-width); margin-left: auto; margin-right: auto; width: 100%; box-sizing: border-box; }
-.bottom-nav { max-width: var(--max-width); margin: 0 auto; }
+/* Mobile: centered in viewport */
+.app-header { width: 100%; box-sizing: border-box; }
+.app-main   { width: 100%; box-sizing: border-box; }
+.bottom-nav { width: 100%; }
 
 /* ── HEADER ── */
 .app-header {
@@ -155,3 +157,25 @@ body {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--md-outline); border-radius: 3px; }
+
+
+/* ── Desktop: kill ALL max-width centering ── */
+@media (min-width: 1024px) {
+  :root { --max-width: 100%; }
+
+  .app-header,
+  .app-main,
+  .content-col,
+  .screen-stack {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .bottom-nav {
+    max-width: none !important;
+    margin: 0 !important;
+  }
+}

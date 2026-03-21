@@ -9,6 +9,8 @@ const HomeScreen = (() => {
   /* ── Render ── */
   const render = () => {
     const root = Utils.el('home-root');
+    const userState = window.UserData ? UserData.getState() : { hydrationGoal: Storage.getGoal(), coinBalance: 0 };
+    const usage = window.UserData ? UserData.canUseFreeDrink() : { limit: null, used: 0, remaining: 0 };
     root.innerHTML = `
       <div class="screen-stack">
 
@@ -20,7 +22,7 @@ const HomeScreen = (() => {
                 <span id="heroAmount">0</span>
                 <span class="hero-unit">ml</span>
               </div>
-              <div class="hero-goal">of <span id="heroGoal">${Storage.getGoal()}</span> ml goal</div>
+              <div class="hero-goal">of <span id="heroGoal">${userState.hydrationGoal || Storage.getGoal()}</span> ml goal</div>
             </div>
             <div class="hero-ring">
               <svg width="80" height="80" viewBox="0 0 160 160">
@@ -40,14 +42,60 @@ const HomeScreen = (() => {
             </div>
             <div class="hero-progress-labels">
               <span id="heroRemain">3000 ml to go</span>
-              <span id="heroGoalLabel">${Storage.getGoal()} ml</span>
+              <span id="heroGoalLabel">${userState.hydrationGoal || Storage.getGoal()} ml</span>
             </div>
           </div>
           <div class="hero-motivation" id="heroMotivation">🌊 Start your hydration journey!</div>
         </div>
 
+        <!-- streak + free drink strip -->
+        <div class="home-strip">
+          <div class="home-strip__item">
+            <span class="home-strip__icon">🔥</span>
+            <span class="home-strip__val" id="homeStreakVal">0</span>
+            <span class="home-strip__label">day streak</span>
+          </div>
+          <div class="home-strip__divider"></div>
+          <div class="home-strip__item" id="stepsStripItem" style="display:none;">
+            <span class="home-strip__icon">👟</span>
+            <span class="home-strip__val" id="homeStepsVal">0</span>
+            <span class="home-strip__label">steps today</span>
+          </div>
+          <div class="home-strip__item" id="drinksStripItem">
+            <span class="home-strip__icon">🥤</span>
+            <span class="home-strip__val">${usage.limit ? usage.remaining : '∞'}</span>
+            <span class="home-strip__label">${usage.limit ? 'drinks left' : 'unlimited'}</span>
+          </div>
+        </div>
+
         <!-- Weather strip -->
         <div id="weatherStrip" style="display:none;"></div>
+
+        <!-- Step count card (Android + workout mode only) -->
+        <div id="stepsCard" style="display:none;">
+          <div class="steps-card">
+            <div class="steps-card__header">
+              <div class="steps-card__left">
+                <span class="steps-card__icon">👟</span>
+                <div>
+                  <div class="steps-card__title">Steps Today</div>
+                  <div class="steps-card__sub" id="stepsCardSub">Syncing from Health Connect…</div>
+                </div>
+              </div>
+              <div class="steps-card__right">
+                <div class="steps-card__count" id="stepsCardCount">0</div>
+                <div class="steps-card__unit">steps</div>
+              </div>
+            </div>
+            <div class="steps-card__bar-wrap">
+              <div class="steps-card__bar" id="stepsBar" style="width:0%"></div>
+            </div>
+            <div class="steps-card__footer">
+              <span id="stepsLossLabel" class="steps-card__loss">Calculating…</span>
+              <button class="steps-card__refresh" id="stepsRefreshBtn">↻ Sync</button>
+            </div>
+          </div>
+        </div>
 
         <!-- Add row: water + other drink -->
         <div style="display:flex;gap:10px;">
@@ -144,6 +192,7 @@ const HomeScreen = (() => {
 
     updateUI();
     fetchWeatherStrip();
+    initStepsCard();
   };
 
   /* ── Weather strip ── */
@@ -292,6 +341,13 @@ const HomeScreen = (() => {
     overlay.querySelector('#sheetLogBtn').addEventListener('click', async () => {
       const rawAmt = parseInt(input.value) || 0;
       if (rawAmt <= 0) { Utils.showToast('⚠️ Enter an amount'); return; }
+      if (selectedDrink.id !== 'water' && window.UserData) {
+        const allowance = UserData.canUseFreeDrink();
+        if (!allowance.allowed) {
+          Utils.showToast('Free users can log 5 non-water drinks per week.');
+          return;
+        }
+      }
 
       const eq = Drinks.waterEquivalent(selectedDrink.id, rawAmt);
       const today = Utils.todayString();
@@ -309,7 +365,13 @@ const HomeScreen = (() => {
         Utils.showToast('⚠️ Zero hydration — nothing logged');
       }
 
+      if (selectedDrink.id !== 'water' && window.UserData) {
+        await UserData.registerDrinkUsage();
+      }
+
       closeSheet();
+      if (window.UserData) await UserData.recomputeProgress();
+      if (window.Leaderboard && Firebase.getUserId()) Leaderboard.publishStreak(Firebase.getUserId()).catch(() => {});
       await updateUI();
     });
   };
@@ -358,17 +420,34 @@ const HomeScreen = (() => {
     }
     Utils.el('heroPct')      && (Utils.el('heroPct').textContent      = `${pctInt}%`);
     Utils.el('heroProgress') && (Utils.el('heroProgress').style.width = `${pctInt}%`);
+    Utils.el('heroGoal')     && (Utils.el('heroGoal').textContent = goal);
+    Utils.el('heroGoalLabel')&& (Utils.el('heroGoalLabel').textContent = `${goal} ml`);
     Utils.el('heroRemain')   && (Utils.el('heroRemain').textContent   = remain > 0 ? `${remain} ml to go` : '🎉 Goal reached!');
     Utils.el('heroMotivation') && (Utils.el('heroMotivation').textContent = Utils.getMotivation(pct));
     Utils.el('statTotal')   && (Utils.el('statTotal').textContent    = `${total} ml`);
     Utils.el('statRemain')  && (Utils.el('statRemain').textContent   = `${remain} ml`);
     Utils.el('statPct')     && (Utils.el('statPct').textContent      = `${pctInt}%`);
+    if (window.UserData) {
+      const userState = UserData.getState();
+      Utils.el('homeCoinBalance') && (Utils.el('homeCoinBalance').textContent = userState.coinBalance || 0);
+    }
   };
 
   /* ── Adjust water (pure water quick-add) ── */
   let isAdjusting = false;
+  let _lastAddTime = 0;
+  const ADD_COOLDOWN_MS = 1500; // min 1.5s between add taps
   const adjustWater = async (amount) => {
     if (isAdjusting) return;
+    // Rate limit: prevent spam taps
+    if (amount > 0) {
+      const now = Date.now();
+      if (now - _lastAddTime < ADD_COOLDOWN_MS) {
+        Utils.showToast('⏳ Too fast! Wait a moment.');
+        return;
+      }
+      _lastAddTime = now;
+    }
     isAdjusting = true;
     const today  = Utils.todayString();
     const addBtn = Utils.el('mainAddBtn');
@@ -384,6 +463,8 @@ const HomeScreen = (() => {
         await Storage.setTotalForDate(today, newTotal);
         Utils.showToast(`${Math.abs(amount)} ml removed 📉`);
       }
+      if (window.UserData) await UserData.recomputeProgress();
+      if (window.Leaderboard && Firebase.getUserId()) Leaderboard.publishStreak(Firebase.getUserId()).catch(() => {});
       await updateUI();
     } catch (e) {
       Utils.showToast('❌ ' + e.message);
@@ -401,5 +482,98 @@ const HomeScreen = (() => {
     });
   };
 
-  return { init, updateUI };
+  /* ── Steps Card ── */
+  const initStepsCard = async () => {
+    const card = document.getElementById('stepsCard');
+    if (!card) return;
+
+    // Show card whenever workout mode is on — on all platforms
+    const st = window.UserData ? UserData.getState() : {};
+    const workoutOn = st.userProfile && st.userProfile.workoutToday === true;
+
+    if (!workoutOn) {
+      card.style.display = 'none';
+      // Show drinks in strip, hide steps
+      const stepsStrip = document.getElementById('stepsStripItem');
+      const drinksStrip = document.getElementById('drinksStripItem');
+      if (stepsStrip)  stepsStrip.style.display = 'none';
+      if (drinksStrip) drinksStrip.style.display = '';
+      return;
+    }
+
+    card.style.display = 'block';
+
+    // Show steps in strip, hide drinks
+    const stepsStrip = document.getElementById('stepsStripItem');
+    const drinksStrip = document.getElementById('drinksStripItem');
+    if (stepsStrip)  stepsStrip.style.display = '';
+    if (drinksStrip) drinksStrip.style.display = 'none';
+
+    const isAndroid = window.StepTracker && StepTracker.isAndroid();
+    const subEl = document.getElementById('stepsCardSub');
+    const refreshBtn = document.getElementById('stepsRefreshBtn');
+
+    if (!isAndroid) {
+      // Desktop/non-Android: show static message, no Health Connect
+      if (subEl) subEl.textContent = 'Step tracking available on Android';
+      if (refreshBtn) refreshBtn.style.display = 'none';
+      const countEl = document.getElementById('stepsCardCount');
+      const lossEl  = document.getElementById('stepsLossLabel');
+      const barEl   = document.getElementById('stepsBar');
+      if (countEl) countEl.textContent = '—';
+      if (lossEl)  lossEl.textContent = 'Install on Android to track steps';
+      if (barEl)   barEl.style.width = '0%';
+      return;
+    }
+
+    if (!StepTracker.hasPermission()) {
+      if (subEl) subEl.textContent = 'Tap Sync to connect Health Connect';
+    }
+    await updateStepsDisplay();
+
+    document.getElementById('stepsRefreshBtn')?.addEventListener('click', async () => {
+      if (subEl) subEl.textContent = 'Syncing…';
+      if (!StepTracker.hasPermission()) {
+        const granted = await StepTracker.requestPermission();
+        if (!granted) {
+          if (subEl) subEl.textContent = 'Permission denied — grant in Health Connect';
+          return;
+        }
+      }
+      await updateStepsDisplay();
+    });
+  };
+
+  const updateStepsDisplay = async () => {
+    if (!window.StepTracker) return;
+    const steps = await StepTracker.sync();
+    const stepVal = document.getElementById('homeStepsVal');
+    const countEl = document.getElementById('stepsCardCount');
+    const subEl   = document.getElementById('stepsCardSub');
+    const lossEl  = document.getElementById('stepsLossLabel');
+    const barEl   = document.getElementById('stepsBar');
+    if (stepVal) stepVal.textContent = steps >= 1000 ? (steps/1000).toFixed(1)+'k' : String(steps);
+    if (countEl) countEl.textContent = steps.toLocaleString();
+    let temp = 22, humidity = 50;
+    try {
+      const w = window.Weather ? await Weather.fetch() : null;
+      if (w) { temp = w.temp; humidity = w.humidity; }
+    } catch(e) {}
+    const lossml = StepTracker.calcHydrationLoss(steps, temp, humidity);
+    const goal = 10000;
+    const pct = Math.min(100, Math.round((steps / goal) * 100));
+    if (subEl) subEl.textContent = steps.toLocaleString() + ' of 10,000 steps (' + pct + '%)';
+    if (barEl) barEl.style.width = pct + '%';
+    if (lossEl) {
+      if (lossml > 0) {
+        lossEl.textContent = '~' + lossml + ' ml hydration lost to activity';
+        lossEl.style.color = lossml > 500 ? '#ff7043' : lossml > 200 ? '#ffb74d' : '#81c784';
+      } else {
+        lossEl.textContent = 'No significant hydration loss yet';
+        lossEl.style.color = '#81c784';
+      }
+    }
+  };
+
+  return { init, updateUI, updateStepsDisplay };
 })();
