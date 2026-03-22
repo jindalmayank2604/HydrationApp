@@ -490,11 +490,14 @@ const App = (() => {
         if (window.UserData && UserData.addFamilyMemberBidirectional) {
           await UserData.addFamilyMemberBidirectional(inviterUid, myUid);
         } else {
-          // Fallback: SELF-ONLY write — add inviter to current user's own doc only
-          const db = firebase.firestore();
-          await db.collection('users').doc(myUid).update({
-            familyMembers: firebase.firestore.FieldValue.arrayUnion(inviterUid)
-          });
+          // Fallback: use UserData.save() to write achievementState.familyMembers
+          // (db.update writes to top-level field which sync() does not read back)
+          if (window.UserData) {
+            const current = UserData.getState().familyMembers || [];
+            const members = Array.from(new Set([...current, inviterUid]));
+            console.log('[Family] Fallback save, familyMembers:', members);
+            await UserData.save({ familyMembers: members });
+          }
         }
         closeModal();
         Utils.showToast(`🎉 You joined ${inviterName}'s family network!`);

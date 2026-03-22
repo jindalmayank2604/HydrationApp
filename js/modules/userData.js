@@ -603,14 +603,16 @@ const UserData = (() => {
   }
 
   async function addFamilyMemberBidirectional(inviterUid, joinerUid) {
-    /* ── SECURITY FIX ──────────────────────────────────────────────
-       Firestore rules only allow users to write their OWN document.
-       Old code tried to batch.update BOTH users docs → permission error.
+    /* ── CORRECTNESS FIX ──────────────────────────────────────────
+       Root cause of silent failure: the previous code called
+       db.update({ familyMembers: arrayUnion(...) }) which wrote to
+       the TOP-LEVEL familyMembers field on the user document.
+       But sync() reads from achievementState.familyMembers — so the
+       write succeeded but was never read back, leaving the UI empty.
 
-       New approach: joiner writes ONLY their own doc (adds inviterUid).
-       Mutual visibility is achieved at READ time via reverse lookup:
-         _getFamilyUids() also queries for users whose familyMembers
-         contains myUid, so both sides see each other.
+       Fix: use save({ familyMembers }) which writes through the
+       normal save() path → achievementState.familyMembers — the
+       exact field sync() reads on load.
        ─────────────────────────────────────────────────────────────── */
     if (!window.firebase || !firebase.apps?.length) throw new Error('Firebase not ready.');
     if (!inviterUid || !joinerUid) throw new Error('Invalid user IDs.');
@@ -623,6 +625,7 @@ const UserData = (() => {
     const db = firebase.firestore();
 
     // Validate inviter exists before adding
+    console.log('[Family] Validating inviter:', inviterUid);
     const inviterDoc = await db.collection('users').doc(inviterUid).get();
     if (!inviterDoc.exists) throw new Error('Invite link is invalid or expired.');
 
@@ -631,17 +634,21 @@ const UserData = (() => {
       throw new Error('Already connected with this person.');
     }
 
-    // SELF-ONLY WRITE: update only the current user (joiner) document
-    await db.collection('users').doc(joinerUid).update({
-      familyMembers: firebase.firestore.FieldValue.arrayUnion(inviterUid)
-    });
-
-    // Sync local state immediately (optimistic update)
+    // Build updated members array
     const members = Array.from(new Set([...(state.familyMembers || []), inviterUid]));
-    await save({ familyMembers: members });
+    console.log('[Family] Writing familyMembers via save():', members);
+
+    try {
+      // save() writes achievementState.familyMembers — the correct path sync() reads from
+      await save({ familyMembers: members });
+      console.log('[Family] Firestore write complete. familyMembers:', UserData ? UserData.getState().familyMembers : members);
+    } catch(e) {
+      console.error('[Family] save() failed:', e.message);
+      throw e;
+    }
 
     _famLbCacheInvalidate();
-    _reverseFamilyCache = { uids: [], ts: 0 }; // also invalidate reverse cache
+    _reverseFamilyCache = { uids: [], ts: 0 };
     return members;
   }
 
