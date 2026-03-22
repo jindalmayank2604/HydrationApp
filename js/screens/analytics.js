@@ -8,18 +8,26 @@ const AnalyticsScreen = (() => {
 
   /* ── Init ── */
   let _activeFamilyUnsub = null;
+  let _udUnsub = null; // UserData subscriber for family membership changes
   const init = () => {
     Router.on('analytics', () => {
-      // Clean up previous family leaderboard listener before re-render
       if (_activeFamilyUnsub) { _activeFamilyUnsub(); _activeFamilyUnsub = null; }
       render();
     });
-    // Clean up when navigating away from analytics
     ['home','history','achievements','settings','shop','reminder'].forEach(screen => {
       Router.on(screen, () => {
         if (_activeFamilyUnsub) { _activeFamilyUnsub(); _activeFamilyUnsub = null; }
       });
     });
+    // Re-render family leaderboard whenever familyMembers changes (e.g. after accepting invite)
+    if (window.UserData) {
+      _udUnsub = UserData.subscribe((newState) => {
+        if (Router.getCurrent() === 'analytics') {
+          const tile = Utils.el('familyLeaderboardTile');
+          if (tile) renderFamilyLeaderboard();
+        }
+      });
+    }
   };
 
   /* ── Render shell ── */

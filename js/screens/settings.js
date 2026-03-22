@@ -1064,6 +1064,21 @@ const SettingsScreen = (() => {
 
   const init = () => {
     Router.on('settings', () => { renderForRole(); setTimeout(() => initStyledSelects(), 50); });
+
+    // Subscribe to UserData state changes — re-patch the family count without full re-render
+    if (window.UserData) {
+      UserData.subscribe((newState) => {
+        // Only patch the family count cell if settings is currently rendered
+        const countEl = document.querySelector('.settings-detail-row strong');
+        // Find specifically the family members count row
+        document.querySelectorAll('.settings-detail-row').forEach(row => {
+          if (row.querySelector('span')?.textContent?.includes('Family')) {
+            const strong = row.querySelector('strong');
+            if (strong) strong.textContent = (newState.familyMembers || []).length;
+          }
+        });
+      });
+    }
   };
   function _patchWorkoutMode() {
     const _uid = (window.Firebase?.getUserId?.()) || (window.Auth?.getSession?.()?.uid)

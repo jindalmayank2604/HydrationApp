@@ -487,25 +487,33 @@ const App = (() => {
       const btn = document.getElementById('familyJoinAccept');
       if (btn) { btn.textContent = 'Joining…'; btn.disabled = true; }
       try {
+        console.log('[App] Accept invite — inviterUid:', inviterUid, 'myUid:', Firebase.getUserId());
+
         if (window.UserData && UserData.addFamilyMemberBidirectional) {
-          await UserData.addFamilyMemberBidirectional(inviterUid, myUid);
+          // Pass only inviterUid — function now resolves joinerUid internally via Firebase.getUserId()
+          await UserData.addFamilyMemberBidirectional(inviterUid, Firebase.getUserId());
         } else {
-          // Fallback: use UserData.save() to write achievementState.familyMembers
-          // (db.update writes to top-level field which sync() does not read back)
+          // Fallback: direct save via UserData
           if (window.UserData) {
             const current = UserData.getState().familyMembers || [];
             const members = Array.from(new Set([...current, inviterUid]));
-            console.log('[Family] Fallback save, familyMembers:', members);
+            console.log('[App] Fallback save, members:', members);
             await UserData.save({ familyMembers: members });
           }
         }
+
         closeModal();
         Utils.showToast(`🎉 You joined ${inviterName}'s family network!`);
-        // Refresh settings if open
-        if (window.SettingsScreen && Router.getCurrent() === 'settings') SettingsScreen.renderForRole();
+
+        // Force UI refresh on all screens that show family data
+        console.log('[App] Refreshing UI after family join...');
+        if (window.SettingsScreen) SettingsScreen.renderForRole();
+        if (window.AnalyticsScreen && Router.getCurrent() === 'analytics') {
+          setTimeout(() => Router.navigate('analytics'), 100);
+        }
       } catch(e) {
-        console.warn('[App] Family join failed:', e.message);
-        Utils.showToast('Could not join: ' + e.message);
+        console.error('[App] Family join failed:', e.message, e);
+        Utils.showToast('❌ ' + e.message);
         if (btn) { btn.textContent = '✅ Accept'; btn.disabled = false; }
       }
     });
