@@ -108,6 +108,7 @@ service cloud.firestore {
         && (!('equippedFrame' in data) || data.equippedFrame == null || data.equippedFrame is string)
         && (!('purchasedFrames' in data) || data.purchasedFrames is list)
         && (!('workoutToday' in data) || data.workoutToday is bool)
+        && (!('familyMembers' in data) || data.familyMembers is list)
         && validAchievementState(data)
         && validProfileMeta(data);
     }

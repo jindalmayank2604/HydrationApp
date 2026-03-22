@@ -490,12 +490,11 @@ const App = (() => {
         if (window.UserData && UserData.addFamilyMemberBidirectional) {
           await UserData.addFamilyMemberBidirectional(inviterUid, myUid);
         } else {
-          // Fallback direct Firestore write
+          // Fallback: SELF-ONLY write — add inviter to current user's own doc only
           const db = firebase.firestore();
-          const batch = db.batch();
-          batch.update(db.collection('users').doc(inviterUid), { familyMembers: firebase.firestore.FieldValue.arrayUnion(myUid) });
-          batch.update(db.collection('users').doc(myUid), { familyMembers: firebase.firestore.FieldValue.arrayUnion(inviterUid) });
-          await batch.commit();
+          await db.collection('users').doc(myUid).update({
+            familyMembers: firebase.firestore.FieldValue.arrayUnion(inviterUid)
+          });
         }
         closeModal();
         Utils.showToast(`🎉 You joined ${inviterName}'s family network!`);

@@ -603,30 +603,46 @@ const UserData = (() => {
   }
 
   async function addFamilyMemberBidirectional(inviterUid, joinerUid) {
-    // Called when joiner accepts invite — updates BOTH users' familyMembers in Firestore
+    /* ── SECURITY FIX ──────────────────────────────────────────────
+       Firestore rules only allow users to write their OWN document.
+       Old code tried to batch.update BOTH users docs → permission error.
+
+       New approach: joiner writes ONLY their own doc (adds inviterUid).
+       Mutual visibility is achieved at READ time via reverse lookup:
+         _getFamilyUids() also queries for users whose familyMembers
+         contains myUid, so both sides see each other.
+       ─────────────────────────────────────────────────────────────── */
     if (!window.firebase || !firebase.apps?.length) throw new Error('Firebase not ready.');
+    if (!inviterUid || !joinerUid) throw new Error('Invalid user IDs.');
     if (inviterUid === joinerUid) throw new Error('Cannot join your own family.');
+
+    const myUid = window.Firebase ? Firebase.getUserId() : null;
+    if (!myUid) throw new Error('Not logged in.');
+    if (myUid !== joinerUid) throw new Error('Auth mismatch — can only join as yourself.');
+
     const db = firebase.firestore();
-    const batch = db.batch();
-    // Add joiner to inviter's familyMembers
-    batch.update(db.collection('users').doc(inviterUid), {
-      familyMembers: firebase.firestore.FieldValue.arrayUnion(joinerUid)
-    });
-    // Add inviter to joiner's familyMembers
-    batch.update(db.collection('users').doc(joinerUid), {
+
+    // Validate inviter exists before adding
+    const inviterDoc = await db.collection('users').doc(inviterUid).get();
+    if (!inviterDoc.exists) throw new Error('Invite link is invalid or expired.');
+
+    // Check not already connected
+    if ((state.familyMembers || []).includes(inviterUid)) {
+      throw new Error('Already connected with this person.');
+    }
+
+    // SELF-ONLY WRITE: update only the current user (joiner) document
+    await db.collection('users').doc(joinerUid).update({
       familyMembers: firebase.firestore.FieldValue.arrayUnion(inviterUid)
     });
-    await batch.commit();
-    _famLbCacheInvalidate(); // cache is stale after membership change
-    // Update local state for the current user (joiner)
-    const myUid = window.Firebase ? Firebase.getUserId() : null;
-    if (myUid === joinerUid) {
-      const members = Array.from(new Set([...(state.familyMembers || []), inviterUid]));
-      await save({ familyMembers: members });
-    } else if (myUid === inviterUid) {
-      const members = Array.from(new Set([...(state.familyMembers || []), joinerUid]));
-      await save({ familyMembers: members });
-    }
+
+    // Sync local state immediately (optimistic update)
+    const members = Array.from(new Set([...(state.familyMembers || []), inviterUid]));
+    await save({ familyMembers: members });
+
+    _famLbCacheInvalidate();
+    _reverseFamilyCache = { uids: [], ts: 0 }; // also invalidate reverse cache
+    return members;
   }
 
   /* ── Family leaderboard cache (localStorage, 5-min TTL) ── */
@@ -658,17 +674,56 @@ const UserData = (() => {
       return bp-ap;
     }).map((r,i) => ({ ...r, rank: i+1 }));
 
+  // Cached reverse-lookup UIDs (users who added ME to their family)
+  let _reverseFamilyCache = { uids: [], ts: 0 };
+  const _REVERSE_TTL = 5 * 60 * 1000; // 5 min
+
+  /* Fetch UIDs of users who have added myUid to their familyMembers.
+     This is the reverse-lookup needed for mutual visibility without
+     cross-user writes. Cached to avoid repeated Firestore reads. */
+  const _fetchReverseFamily = async (myUid) => {
+    if (!myUid || !window.firebase || !firebase.apps?.length) return [];
+    const now = Date.now();
+    if (_reverseFamilyCache.uids.length && now - _reverseFamilyCache.ts < _REVERSE_TTL) {
+      return _reverseFamilyCache.uids;
+    }
+    try {
+      const snap = await firebase.firestore().collection('users')
+        .where('familyMembers', 'array-contains', myUid)
+        .get();
+      const uids = snap.docs.map(d => d.id).filter(id => id !== myUid);
+      _reverseFamilyCache = { uids, ts: now };
+      return uids;
+    } catch(e) {
+      console.warn('[UserData] reverse family lookup failed:', e.message);
+      return [];
+    }
+  };
+
   const _getFamilyUids = () => {
     const myUid = window.Firebase ? Firebase.getUserId() : null;
+    // Synchronous: returns own familyMembers + self only.
+    // For full mutual visibility, callers should use _getFamilyUidsAsync().
     return Array.from(new Set([
       ...(state.familyMembers || []),
       ...(myUid ? [myUid] : [])
     ].filter(Boolean)));
   };
 
+  /* Async version: adds reverse-lookup UIDs for mutual visibility */
+  const _getFamilyUidsAsync = async () => {
+    const myUid = window.Firebase ? Firebase.getUserId() : null;
+    const reverseUids = myUid ? await _fetchReverseFamily(myUid) : [];
+    return Array.from(new Set([
+      ...(state.familyMembers || []),
+      ...reverseUids,
+      ...(myUid ? [myUid] : [])
+    ].filter(Boolean)));
+  };
+
   async function fetchFamilyLeaderboard(forceRefresh) {
     if (!window.firebase || !firebase.apps?.length) return [];
-    const memberUids = _getFamilyUids();
+    const memberUids = await _getFamilyUidsAsync();
     if (!memberUids.length) return [];
 
     // Return from cache unless forced refresh
@@ -714,24 +769,25 @@ const UserData = (() => {
   /* Instead of N listeners for N family members, we only listen to  */
   /* our own doc changing. Family data is fetched on-demand with TTL.*/
   function subscribeToFamilyLeaderboard(callback) {
-    const memberUids = _getFamilyUids();
-    if (!memberUids.length) { callback([]); return () => {}; }
-
-    // Serve cached data immediately (no read)
+    // Bootstrap with sync UIDs immediately, then enhance with reverse lookup
+    const syncUids = _getFamilyUids();
     const cached = _famLbCacheRead();
-    if (cached) { callback(cached); }
+    if (cached) callback(cached);
 
     let _debounceTimer = null;
+    let _unsub = null;
+    let _cancelled = false;
+
     const _refresh = () => {
       clearTimeout(_debounceTimer);
       _debounceTimer = setTimeout(async () => {
+        if (_cancelled) return;
         const rows = await fetchFamilyLeaderboard(true);
-        callback(rows);
-      }, 400); // 400ms debounce
+        if (!_cancelled) callback(rows);
+      }, 400);
     };
 
-    // Only listen to current user's own leaderboard doc — not every member
-    let _unsub = null;
+    // Attach own-doc listener (fires when our leaderboard data changes)
     const myUid = window.Firebase ? Firebase.getUserId() : null;
     if (myUid && window.firebase && firebase.apps?.length) {
       try {
@@ -740,10 +796,11 @@ const UserData = (() => {
       } catch(e) { console.warn('[FamilyLB] could not attach listener:', e.message); }
     }
 
-    // Initial fetch if no cache
+    // If no cache, do initial fetch (includes reverse-lookup via _getFamilyUidsAsync)
     if (!cached) _refresh();
 
     return () => {
+      _cancelled = true;
       clearTimeout(_debounceTimer);
       if (_unsub) _unsub();
     };
