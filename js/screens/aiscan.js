@@ -1318,6 +1318,16 @@ const analyseColour = (imgElement) => {
     });
 
     bindEvents();
+    // Show scan count badge
+    if (window.TokenManager) {
+      TokenManager.getBadgeHTML().then(html => {
+        const badge = _overlay?.querySelector('#scanBadge');
+        if (badge) badge.outerHTML = html || '';
+      });
+    } else {
+      const badge = _overlay?.querySelector('#scanBadge');
+      if (badge) badge.remove();
+    }
 
     // Nyckel AI — no pre-loading needed
   };
@@ -1356,7 +1366,10 @@ const analyseColour = (imgElement) => {
             <div style="color:#fff;font-size:19px;font-weight:700;font-family:var(--font-display);display:flex;align-items:center;gap:8px;">
               <span style="font-size:22px;">🔬</span> Drink Scanner
             </div>
-            <div style="color:rgba(255,255,255,0.8);font-size:11px;margin-top:2px;">Nyckel AI · Colour analysis offline</div>
+            <div style="color:rgba(255,255,255,0.8);font-size:11px;margin-top:2px;display:flex;align-items:center;gap:6px;">
+              Nyckel AI · Colour analysis offline
+              <span id="scanBadge" style="background:rgba(255,255,255,0.15);padding:1px 7px;border-radius:99px;font-size:10px;font-weight:700;">...</span>
+            </div>
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
             <span id="modelStatus" style="
@@ -1909,7 +1922,7 @@ const analyseColour = (imgElement) => {
 
               <!-- Heading -->
               <div style="font-size:17px;font-weight:800;color:#FBBC04;margin-bottom:6px;letter-spacing:-0.2px;">
-                Daily Limit Reached
+                ${used >= max && period === 'monthly' ? 'Monthly Limit Reached' : 'Daily Limit Reached'}
               </div>
               <div style="font-size:13px;color:var(--md-on-surface-med);line-height:1.6;margin-bottom:20px;">
                 ${reason}
@@ -1928,7 +1941,7 @@ const analyseColour = (imgElement) => {
                       display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">✨</div>
                     <div>
                       <div style="font-size:13px;font-weight:600;color:var(--md-on-background);">450 AI scans / month</div>
-                      <div style="font-size:11px;color:var(--md-on-surface-low);">vs 2 scans/day on free</div>
+                      <div style="font-size:11px;color:var(--md-on-surface-low);">Free plan: 2 scans/day</div>
                     </div>
                     <div style="margin-left:auto;font-size:11px;font-weight:700;color:#FBBC04;">PRO</div>
                   </div>
@@ -1968,6 +1981,8 @@ const analyseColour = (imgElement) => {
             </div>`;
           return;
         }
+        /* Allowed — record usage immediately (every attempt counts toward limit) */
+        TokenManager.recordScan().catch(() => {});
       } catch(e) {
         /* Non-fatal — let the scan proceed if token check fails */
         console.warn('[AIScan] Token check failed:', e.message);
@@ -2015,8 +2030,6 @@ const analyseColour = (imgElement) => {
       }
 
       if (aiResult && aiResult.confidence >= 0.3) {
-        /* Record usage after a successful AI identification */
-        if (window.TokenManager) TokenManager.recordScan().catch(() => {});
         renderResult(aiResult, aiResult.confidence < 0.5);
         return;
       }
@@ -2098,8 +2111,8 @@ const analyseColour = (imgElement) => {
               </span>
             </div>
           </div>
-          <div style="text-align:right;flex-shrink:0;">
-            <div style="font-size:26px;font-weight:700;color:${color};">${r.hydration > 0 ? '+' : ''}${r.hydration}%</div>
+          <div style="text-align:right;flex-shrink:0;min-width:60px;">
+            <div style="font-size:22px;font-weight:800;color:${color};white-space:nowrap;">${r.hydration > 0 ? '+' : ''}${r.hydration}%</div>
             <div style="font-size:10px;color:var(--md-on-surface-med,#5F6368);">hydration</div>
           </div>
         </div>

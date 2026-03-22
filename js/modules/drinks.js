@@ -20,7 +20,10 @@ const Drinks = (() => {
 
   /* ── Per-user private drinks ── */
   const privateKey = () => {
-    const uid = window.Firebase ? Firebase.getUserId() : null;
+    // Try Firebase first, then session, then wt_session_v1
+    const uid = (window.Firebase && Firebase.getUserId())
+      || (window.Auth && Auth.getSession()?.uid)
+      || (() => { try { return JSON.parse(localStorage.getItem('wt_session_v1')||'{}').uid||null; } catch(e){return null;} })();
     return uid ? `wt_drinks_private_${uid}` : null;
   };
 
@@ -114,11 +117,13 @@ const Drinks = (() => {
   };
 
   /* ── Public API ── */
-  const getAll  = () => [...readLocal(), ...readPrivate()];
-  const getById = (id) => getAll().find(d => d.id === id) || DEFAULT_DRINKS[0];
+  const getShared = () => readLocal();                            // shared only (admin edits)
+  const getAll    = () => [...readLocal(), ...readPrivate()];     // shared + private (drink log)
+  const getById   = (id) => getAll().find(d => d.id === id) || DEFAULT_DRINKS[0];
 
+  // Admin shared drink operations — only touch shared list, never private
   const add = async (drink) => {
-    const drinks = getAll();
+    const drinks = readLocal(); // shared only
     drink.id     = 'custom_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,7);
     drink.locked = false;
     drinks.push(drink);
@@ -127,14 +132,14 @@ const Drinks = (() => {
   };
 
   const update = async (id, changes) => {
-    const drinks = getAll();
+    const drinks = readLocal(); // shared only
     const idx    = drinks.findIndex(d => d.id === id);
     if (idx !== -1) drinks[idx] = { ...drinks[idx], ...changes };
     await persist(drinks);
   };
 
   const remove = async (id) => {
-    const drinks = getAll().filter(d => d.id !== id || d.locked);
+    const drinks = readLocal().filter(d => d.id !== id || d.locked); // shared only
     await persist(drinks);
   };
 
@@ -147,10 +152,16 @@ const Drinks = (() => {
     drink.isPrivate = true;
     drinks.push(drink);
     writePrivate(drinks);
-    // Also persist to Firestore
+    // Persist to Firestore — only send fields that pass validCustomDrink
     const col = privateCol();
     if (col) {
-      try { await col.doc(drink.id).set(drink); } catch(e) { console.warn('[Drinks] Firestore private write failed:', e.message); }
+      try {
+        await col.doc(drink.id).set({
+          name: drink.name,
+          emoji: drink.emoji,
+          hydration: drink.hydration,
+        });
+      } catch(e) { console.warn('[Drinks] Firestore private write failed:', e.message); }
     }
     return drink;
   };
@@ -178,5 +189,5 @@ const Drinks = (() => {
     return Math.round(amount * drink.hydration / 100);
   };
 
-  return { getAll, getById, add, update, remove, syncFromFirestore, waterEquivalent, DEFAULT_DRINKS, addPrivate, removePrivate, updatePrivate, getPrivateAll, syncPrivateFromFirestore };
+  return { getAll, getShared, getById, add, update, remove, syncFromFirestore, waterEquivalent, DEFAULT_DRINKS, addPrivate, removePrivate, updatePrivate, getPrivateAll, syncPrivateFromFirestore };
 })();

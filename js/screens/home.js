@@ -513,11 +513,14 @@ const HomeScreen = (() => {
     _saveTimer = setTimeout(async () => {
       try {
         const ref = _stepsRef();
-        if (!ref) return;
-        await ref.set({ count: n, date: _today(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+        if (!ref) { console.warn('[Steps] No ref — uid or firebase not ready'); return; }
+        console.log('[Steps] Saving', n, 'to', ref.path);
+        await ref.set({ count: n, date: _today() });
         _updateStepDisplay(n);
-        console.log('[Steps] Saved', n, 'steps to Firestore');
-      } catch(e) { console.warn('[Steps] Save failed:', e.message); }
+        console.log('[Steps] ✅ Saved', n, 'steps');
+      } catch(e) {
+        console.error('[Steps] ❌ Save failed:', e.code, e.message);
+      }
     }, 5000);
   };
 
@@ -633,7 +636,7 @@ const HomeScreen = (() => {
         StepTracker.setTodaySteps(_stepCount);
       }
     }, 3000);
-  };;
+  };
 
   const init = () => {
     render();

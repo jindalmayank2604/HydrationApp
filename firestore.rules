@@ -180,15 +180,6 @@ service cloud.firestore {
       allow delete: if isOwner(uid);
     }
 
-    // Steps subcollection — one doc per day, stores cumulative step count
-    match /users/{uid}/steps/{date} {
-      allow read:   if isOwner(uid);
-      allow write:  if isOwner(uid)
-        && request.resource.data.count is number
-        && request.resource.data.count >= 0
-        && request.resource.data.count <= 100000
-        && request.resource.data.date is string;
-    }
 
     match /users/{uid} {
       allow read:   if isAuthed();
@@ -202,10 +193,19 @@ service cloud.firestore {
       allow delete: if isOwner(uid);
     }
 
+    // Steps subcollection — one doc per day
+    match /users/{uid}/steps/{date} {
+      allow read:  if isOwner(uid);
+      allow write: if isOwner(uid)
+        && request.resource.data.count is number
+        && request.resource.data.count >= 0
+        && request.resource.data.count <= 100000;
+    }
+
+    // Block everything else under users
     match /users/{uid}/{other=**} {
       allow read, write: if false;
     }
-    // Note: steps subcollection is explicitly matched above
 
     // ─── SHARED DRINKS ─────────────────────────────────────
     match /app/shared {

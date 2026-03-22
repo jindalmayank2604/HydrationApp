@@ -57,8 +57,12 @@ const DataExport = window.DataExport = (() => {
 
   /* ── Month picker overlay ── */
   const _showMonthPicker = (onSelect) => {
+    // Prevent duplicate overlays
+    const existing = document.getElementById('monthPickerOverlay');
+    if (existing) { existing.remove(); return; }
     const now     = new Date();
     const overlay = document.createElement('div');
+    overlay.id    = 'monthPickerOverlay';
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
 
     /* Build last 12 months */

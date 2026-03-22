@@ -290,11 +290,8 @@ const App = (() => {
     } else if (_currentScreen === 'home' && window.HomeScreen) {
       HomeScreen.updateUI();
     }
-    // Always patch vitals and meta immediately after sync completes
-    if (window.SettingsScreen) {
-      SettingsScreen._patchVitals?.();
-      SettingsScreen._patchMetaLine?.();
-    }
+    // Patch vitals only if settings screen has already rendered
+    try { if (window.SettingsScreen) { SettingsScreen._patchVitals?.(); SettingsScreen._patchMetaLine?.(); } } catch(e) {}
 
     // Update greeting with real username from UserData (loaded from Firestore)
     const _freshSession = Auth.getSession();
@@ -313,9 +310,9 @@ const App = (() => {
       _greetEl2.innerHTML = 'Hey, ' + _realName + ' ' + _badge2;
     }
 
-    // Load frame catalog from Firestore so frames are ready everywhere
+    // Load frame catalog from Firestore (non-blocking, delayed so Firebase is ready)
     if (window.Frames) {
-      Frames.loadCatalog().catch(() => {});
+      setTimeout(() => Frames.loadCatalog().catch(() => {}), 1500);
     }
 
     /* ── DEV ONLY: temporary 999-coin grant for admin testing ──
@@ -363,12 +360,7 @@ const App = (() => {
         if (session) _updateHeaderAvatar(session);
         // Only patch specific elements — never full re-render from subscribe
         // Full re-render causes visual flash + scroll reset every time water is logged
-        if (window.SettingsScreen) {
-          SettingsScreen._patchMetaLine?.();
-          SettingsScreen._patchVitals?.();
-          SettingsScreen._patchWorkoutMode?.();
-          SettingsScreen._patchGoal?.();
-        }
+        try { if (window.SettingsScreen) { SettingsScreen._patchMetaLine?.(); SettingsScreen._patchVitals?.(); SettingsScreen._patchWorkoutMode?.(); SettingsScreen._patchGoal?.(); } } catch(e) {}
       });
     }
 

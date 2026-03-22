@@ -176,6 +176,9 @@ const SettingsScreen = (() => {
             <div class="settings-section-sub">Only you can see these drink types.</div>
             <div id="privateDrinksList" style="display:flex;flex-direction:column;gap:8px;"></div>
             <button class="md-btn md-btn--filled md-btn--full" id="addPrivateDrinkBtn">+ Add My Custom Drink</button>
+            <div style="font-size:11px;color:var(--md-on-surface-med);margin-top:4px;text-align:center;">
+              ${['pro','admin','maggie'].includes(role) ? 'Unlimited drinks (Pro)' : Drinks.getPrivateAll().length + '/5 drinks used (Free)'}
+            </div>
           </section>
         `}
 
@@ -298,24 +301,15 @@ const SettingsScreen = (() => {
       }
     });
 
-    Utils.el('downloadReportBtn')?.addEventListener('click', () => {
-      console.log('[Report] Clicked. DataExport:', !!window.DataExport, '| role:', Utils.getRole(), '| isPrivileged:', Utils.isPrivileged?.());
-      if (window.DataExport?.downloadMonthlyPDF) {
-        DataExport.downloadMonthlyPDF();
-      } else {
-        console.error('[Report] DataExport module not loaded');
-        Utils.showToast('❌ Report module not loaded — refresh the page');
-      }
-    });
-
-    // Use event delegation as fallback — survives any DOM re-renders
-    const _settingsRoot = Utils.el('settings-root');
-    if (_settingsRoot && !_settingsRoot._reportDelegated) {
-      _settingsRoot._reportDelegated = true;
-      _settingsRoot.addEventListener('click', (e) => {
-        if (e.target.closest('#downloadReportBtn')) {
-          console.log('[Report] Delegated click fired');
-          if (window.DataExport?.downloadMonthlyPDF) DataExport.downloadMonthlyPDF();
+    // Single handler only — no delegation duplicate
+    const _dlBtn = Utils.el('downloadReportBtn');
+    if (_dlBtn && !_dlBtn._bound) {
+      _dlBtn._bound = true;
+      _dlBtn.addEventListener('click', () => {
+        if (window.DataExport?.downloadMonthlyPDF) {
+          DataExport.downloadMonthlyPDF();
+        } else {
+          Utils.showToast('❌ Report module not loaded — refresh the page');
         }
       });
     }
@@ -594,14 +588,21 @@ const SettingsScreen = (() => {
         calEl.style.transform = 'translateX(-50%)';
         // Position below the input field
         const rect = dispInput.getBoundingClientRect();
-        calEl.style.top = (rect.bottom + 8) + 'px';
-        calEl.style.transform = 'translateX(-50%)';
+        // Position below input, but ensure it stays within viewport
+        const viewH = window.innerHeight;
+        const calH = 320; // approximate calendar height
+        const topPos = rect.bottom + 8;
+        // If not enough space below, show above
+        calEl.style.top = (topPos + calH > viewH ? Math.max(8, rect.top - calH - 8) : topPos) + 'px';
         document.body.appendChild(calEl); // append to body, not wrap
         renderCalendar();
         setTimeout(() => document.addEventListener('click', outsideClick), 200);
       };
 
-      const closeCalendar = () => { if(calEl){calEl.remove();calEl=null;} document.removeEventListener('click',outsideClick); };
+      const closeCalendar = () => {
+        if (calEl) { if (calEl._cleanup) calEl._cleanup(); calEl.remove(); calEl = null; }
+        document.removeEventListener('click', outsideClick);
+      };
       const outsideClick2 = (e) => { if(!wrap.contains(e.target) && calEl && !calEl.contains(e.target)) closeCalendar(); };
       const outsideClick  = (e) => { if(!wrap.contains(e.target) && (!calEl || !calEl.contains(e.target))) closeCalendar(); };
 
@@ -1074,7 +1075,7 @@ const _DrinksUI = {};
 _DrinksUI.renderList = function renderDrinksList() {
   const el = Utils.el('drinksList');
   if (!el) return;
-  const drinks = Drinks.getAll();
+  const drinks = Drinks.getShared ? Drinks.getShared() : Drinks.getAll().filter(d => !d.isPrivate);
   el.innerHTML = drinks.map((d) => `
     <div class="drink-row" data-id="${d.id}">
       <span class="drink-row-emoji">${d.emoji}</span>
@@ -1154,6 +1155,15 @@ _PrivateDrinksUI.renderList = function renderPrivateDrinks() {
     await Drinks.removePrivate(btn.dataset.id);
     _PrivateDrinksUI.renderList();
   }));
+  // Update limit bar
+  const role = window.Utils?.getRole ? Utils.getRole() : 'user';
+  const isPro = ['pro','admin','maggie'].includes(role);
+  const limitBar = Utils.el('drinkLimitBar');
+  if (limitBar) {
+    const count = Drinks.getPrivateAll().length;
+    limitBar.textContent = isPro ? '✨ Unlimited (Pro)' : `${count} / 5 drinks used`;
+    limitBar.style.color = (!isPro && count >= 5) ? '#ef4444' : 'var(--md-on-surface-med)';
+  }
 };
 
 _PrivateDrinksUI.showForm = function showPrivateDrinkForm(existing) {
@@ -1182,6 +1192,31 @@ _PrivateDrinksUI.showForm = function showPrivateDrinkForm(existing) {
     const name = overlay.querySelector('#pdfName').value.trim();
     const hydration = parseInt(overlay.querySelector('#pdfHydration').value, 10);
     if (!name) { Utils.showToast('Enter a drink name.'); return; }
+    if (!isEdit) {
+      const role   = window.Utils?.getRole ? Utils.getRole() : (window.Auth?.getSession()?.role || 'user').toLowerCase();
+      const isPro  = ['pro','admin','maggie'].includes(role);
+      const count  = Drinks.getPrivateAll().length;
+      const FREE_MAX = 5;
+      if (!isPro && count >= FREE_MAX) {
+        // Show proper UI instead of just toast
+        overlay.remove();
+        const limitDiv = document.createElement('div');
+        limitDiv.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,0.6);';
+        limitDiv.innerHTML = `
+          <div style="background:var(--md-surface);border-radius:24px;padding:28px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 16px 48px rgba(0,0,0,0.4);">
+            <div style="font-size:48px;margin-bottom:12px;">⭐</div>
+            <div style="font-size:18px;font-weight:800;color:var(--md-on-background);margin-bottom:8px;">Free limit reached</div>
+            <div style="font-size:14px;color:var(--md-on-surface-med);line-height:1.6;margin-bottom:20px;">
+              You've added ${count}/${FREE_MAX} custom drinks on the free plan.<br>Upgrade to Pro for unlimited custom drinks.
+            </div>
+            <button id="limitClose" style="width:100%;padding:14px;background:linear-gradient(135deg,#1d4ed8,#7c3aed);border:none;border-radius:14px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Got it</button>
+          </div>`;
+        document.body.appendChild(limitDiv);
+        limitDiv.querySelector('#limitClose').onclick = () => limitDiv.remove();
+        limitDiv.onclick = (e) => { if(e.target===limitDiv) limitDiv.remove(); };
+        return;
+      }
+    }
     if (isEdit) await Drinks.updatePrivate(existing.id, { emoji, name, hydration });
     else await Drinks.addPrivate({ emoji, name, hydration });
     overlay.remove();
