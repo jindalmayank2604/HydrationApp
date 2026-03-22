@@ -105,24 +105,21 @@ body.dark-mode .mobile-orbit-item {
   letter-spacing: 0.2px; line-height: 1;
   color: #5f6368;
   pointer-events: none;
-  /* Hidden by default — shown on hover/active */
-  max-height: 0;
+  /* Always visible */
+  max-height: 20px;
   overflow: hidden;
-  opacity: 0;
-  transition: max-height 0.2s ease, opacity 0.18s ease;
+  opacity: 1;
+  transition: color 0.18s ease;
 }
-body.dark-mode .mobile-orbit-label { color: rgba(255,255,255,0.7); }
+body.dark-mode .mobile-orbit-label { color: rgba(255,255,255,0.6); }
 
-/* Hover: scale up + fill blue + show label */
+/* Hover: scale up + fill blue */
 .mobile-orbit-item:hover {
   background: #1a73e8;
   color: #fff;
   box-shadow: 0 8px 28px rgba(26,115,232,0.55);
-  /* Don't override transform here — handled per-item below */
 }
 .mobile-orbit-item:hover .mobile-orbit-label {
-  max-height: 20px;
-  opacity: 1;
   color: rgba(255,255,255,0.95);
 }
 

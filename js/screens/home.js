@@ -407,10 +407,20 @@ const HomeScreen = (() => {
       ring.style.stroke = ''; // let CSS data-pct handle color
       const pctLevel = pct >= 1 ? 'full' : pct >= 0.6 ? 'good' : pct >= 0.3 ? 'mid' : 'low';
       ring.setAttribute('data-pct', pctLevel);
-      // goal-reached glow
+      // goal-reached glow + celebration
       if (pct >= 1) {
         ring.classList.add('goal-reached');
         ring.addEventListener('animationend', () => ring.classList.remove('goal-reached'), { once: true });
+        // Trigger confetti celebration (only once per session, not on every render)
+        const heroEl = document.querySelector('.home-hero');
+        if (heroEl && window.AppAnimations && !heroEl._celebrated) {
+          heroEl._celebrated = true;
+          AppAnimations.celebrateGoal(heroEl);
+        }
+      } else {
+        // Reset celebration flag when goal not reached
+        const heroEl = document.querySelector('.home-hero');
+        if (heroEl) heroEl._celebrated = false;
       }
     }
 

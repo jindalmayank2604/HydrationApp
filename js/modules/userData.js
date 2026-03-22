@@ -589,41 +589,164 @@ const UserData = (() => {
     return { reward: milestone.reward, coinBalance };
   }
 
-  async function addFamilyMember(email) {
-    const cleanEmail = String(email || '').trim().toLowerCase();
-    if (!/^[a-z0-9._%+-]+@gmail\.com$/.test(cleanEmail)) {
-      throw new Error('Please enter a valid Gmail address.');
-    }
-    const members = Array.from(new Set([...(state.familyMembers || []), cleanEmail]));
+  async function addFamilyMember(memberUid) {
+    const cleanUid = String(memberUid || '').trim();
+    if (!cleanUid) throw new Error('Invalid user ID.');
+    const myUid = window.Firebase ? Firebase.getUserId() : null;
+    if (!myUid) throw new Error('Not logged in.');
+    if (cleanUid === myUid) throw new Error('You cannot add yourself.');
+    // Prevent duplicates
+    if ((state.familyMembers || []).includes(cleanUid)) throw new Error('Already in your family.');
+    const members = Array.from(new Set([...(state.familyMembers || []), cleanUid]));
     await save({ familyMembers: members });
     return members;
   }
 
-  async function fetchFamilyLeaderboard() {
+  async function addFamilyMemberBidirectional(inviterUid, joinerUid) {
+    // Called when joiner accepts invite — updates BOTH users' familyMembers in Firestore
+    if (!window.firebase || !firebase.apps?.length) throw new Error('Firebase not ready.');
+    if (inviterUid === joinerUid) throw new Error('Cannot join your own family.');
+    const db = firebase.firestore();
+    const batch = db.batch();
+    // Add joiner to inviter's familyMembers
+    batch.update(db.collection('users').doc(inviterUid), {
+      familyMembers: firebase.firestore.FieldValue.arrayUnion(joinerUid)
+    });
+    // Add inviter to joiner's familyMembers
+    batch.update(db.collection('users').doc(joinerUid), {
+      familyMembers: firebase.firestore.FieldValue.arrayUnion(inviterUid)
+    });
+    await batch.commit();
+    _famLbCacheInvalidate(); // cache is stale after membership change
+    // Update local state for the current user (joiner)
+    const myUid = window.Firebase ? Firebase.getUserId() : null;
+    if (myUid === joinerUid) {
+      const members = Array.from(new Set([...(state.familyMembers || []), inviterUid]));
+      await save({ familyMembers: members });
+    } else if (myUid === inviterUid) {
+      const members = Array.from(new Set([...(state.familyMembers || []), joinerUid]));
+      await save({ familyMembers: members });
+    }
+  }
+
+  /* ── Family leaderboard cache (localStorage, 5-min TTL) ── */
+  const _FAM_LB_CACHE_KEY = 'wt_fam_lb_cache_v1';
+  const _FAM_LB_TTL = 5 * 60 * 1000;
+
+  const _famLbCacheRead = () => {
+    try {
+      const raw = localStorage.getItem(_FAM_LB_CACHE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (Date.now() - parsed.ts > _FAM_LB_TTL) return null;
+      return parsed.rows;
+    } catch { return null; }
+  };
+  const _famLbCacheWrite = (rows) => {
+    try { localStorage.setItem(_FAM_LB_CACHE_KEY, JSON.stringify({ ts: Date.now(), rows })); } catch {}
+  };
+  const _famLbCacheInvalidate = () => {
+    try { localStorage.removeItem(_FAM_LB_CACHE_KEY); } catch {}
+  };
+
+  const _sortFamilyRows = (rows) =>
+    rows.sort((a, b) => {
+      const sd = (b.dailyStreak||0)-(a.dailyStreak||0); if (sd!==0) return sd;
+      const gd = (b.goal||0)-(a.goal||0); if (gd!==0) return gd;
+      const ap = a.goal?(a.waterIntakeToday||0)/a.goal:0;
+      const bp = b.goal?(b.waterIntakeToday||0)/b.goal:0;
+      return bp-ap;
+    }).map((r,i) => ({ ...r, rank: i+1 }));
+
+  const _getFamilyUids = () => {
+    const myUid = window.Firebase ? Firebase.getUserId() : null;
+    return Array.from(new Set([
+      ...(state.familyMembers || []),
+      ...(myUid ? [myUid] : [])
+    ].filter(Boolean)));
+  };
+
+  async function fetchFamilyLeaderboard(forceRefresh) {
     if (!window.firebase || !firebase.apps?.length) return [];
-    const family = Array.from(new Set([...(state.familyMembers || []), Auth.getSession()?.email].filter(Boolean)));
+    const memberUids = _getFamilyUids();
+    if (!memberUids.length) return [];
+
+    // Return from cache unless forced refresh
+    if (!forceRefresh) {
+      const cached = _famLbCacheRead();
+      if (cached) return cached;
+    }
+
+    // OPTIMIZED: Firestore allows max 10 ids in 'in' query — batch into chunks of 10
+    const db = firebase.firestore();
     const rows = [];
-    for (const email of family) {
+    const CHUNK = 10;
+
+    for (let i = 0; i < memberUids.length; i += CHUNK) {
+      const chunk = memberUids.slice(i, i + CHUNK);
       try {
-        const snap = await firebase.firestore().collection('leaderboard').where('email', '==', email).limit(1).get();
-        if (!snap.empty) {
-          snap.docs.forEach((doc) => rows.push({ uid: doc.id, ...doc.data() }));
-        } else {
-          rows.push({
-            uid: email,
-            email,
-            displayName: email.split('@')[0],
-            dailyStreak: 0,
-            monthlyStreak: 0,
-          });
-        }
+        const snap = await db.collection('leaderboard')
+          .where(firebase.firestore.FieldPath.documentId(), 'in', chunk)
+          .get();
+        const found = new Set();
+        snap.docs.forEach(doc => {
+          found.add(doc.id);
+          rows.push({ uid: doc.id, ...doc.data() });
+        });
+        // Fill missing uids with defaults (no extra reads)
+        chunk.forEach(uid => {
+          if (!found.has(uid)) {
+            rows.push({ uid, displayName: uid.slice(0,8), dailyStreak: 0, monthlyStreak: 0, goal: 2500, waterIntakeToday: 0 });
+          }
+        });
       } catch (e) {
-        console.warn('[UserData] family lookup failed:', e.message);
+        console.warn('[UserData] family batch fetch failed:', e.message);
+        chunk.forEach(uid => rows.push({ uid, displayName: uid.slice(0,8), dailyStreak: 0, monthlyStreak: 0, goal: 2500, waterIntakeToday: 0 }));
       }
     }
-    return rows
-      .sort((a, b) => (b.dailyStreak || 0) - (a.dailyStreak || 0))
-      .map((row, index) => ({ ...row, rank: index + 1 }));
+
+    const sorted = _sortFamilyRows(rows);
+    _famLbCacheWrite(sorted);
+    return sorted;
+  }
+
+  /* ── Single listener: only the CURRENT user's leaderboard doc ── */
+  /* Instead of N listeners for N family members, we only listen to  */
+  /* our own doc changing. Family data is fetched on-demand with TTL.*/
+  function subscribeToFamilyLeaderboard(callback) {
+    const memberUids = _getFamilyUids();
+    if (!memberUids.length) { callback([]); return () => {}; }
+
+    // Serve cached data immediately (no read)
+    const cached = _famLbCacheRead();
+    if (cached) { callback(cached); }
+
+    let _debounceTimer = null;
+    const _refresh = () => {
+      clearTimeout(_debounceTimer);
+      _debounceTimer = setTimeout(async () => {
+        const rows = await fetchFamilyLeaderboard(true);
+        callback(rows);
+      }, 400); // 400ms debounce
+    };
+
+    // Only listen to current user's own leaderboard doc — not every member
+    let _unsub = null;
+    const myUid = window.Firebase ? Firebase.getUserId() : null;
+    if (myUid && window.firebase && firebase.apps?.length) {
+      try {
+        _unsub = firebase.firestore().collection('leaderboard').doc(myUid)
+          .onSnapshot(() => _refresh(), err => console.warn('[FamilyLB] own-doc listener:', err.message));
+      } catch(e) { console.warn('[FamilyLB] could not attach listener:', e.message); }
+    }
+
+    // Initial fetch if no cache
+    if (!cached) _refresh();
+
+    return () => {
+      clearTimeout(_debounceTimer);
+      if (_unsub) _unsub();
+    };
   }
 
   function getState() {
@@ -648,7 +771,9 @@ const UserData = (() => {
     claimMilestone,
     getRewardForMilestone,
     addFamilyMember,
+    addFamilyMemberBidirectional,
     fetchFamilyLeaderboard,
+    subscribeToFamilyLeaderboard,
     canUseFreeDrink,
     registerDrinkUsage,
     isReady: () => ready,

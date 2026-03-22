@@ -108,7 +108,19 @@ const Leaderboard = (() => {
   };
 
   /* ── Push verified streak to leaderboard collection ── */
-  const publishStreak = async (uid) => {
+  let _publishTimer = null;
+  const publishStreak = (uid) => {
+    // Debounce: if called multiple times quickly, only fire once after 500ms
+    // Returns a Promise so callers can safely chain .catch()
+    clearTimeout(_publishTimer);
+    return new Promise((resolve) => {
+      _publishTimer = setTimeout(() => {
+        _doPublish(uid).then(resolve).catch(resolve); // always resolve — errors are non-fatal
+      }, 500);
+    });
+  };
+
+  const _doPublish = async (uid) => {
     if (!uid) return;
     if (window.Firebase) await Firebase.waitUntilReady(6000);
     if (!window.firebase || !firebase.apps?.length) return;
@@ -152,6 +164,8 @@ const Leaderboard = (() => {
       }, { merge: true });
 
       console.log(`[Leaderboard] Published — daily:${daily} monthly:${monthly}`);
+      // Invalidate local cache so next subscribe() fetches fresh data
+      try { localStorage.removeItem(_lbCacheKey('daily')); localStorage.removeItem(_lbCacheKey('monthly')); } catch {}
     } catch (e) {
       console.warn('[Leaderboard] publish failed:', e.message);
     }
@@ -183,90 +197,100 @@ const Leaderboard = (() => {
     }
   };
 
-  /* ── Real-time listener ──
-     CHANGE-3: Same fix as fetchTop — removed flagged Firestore filter.
-     Filter applied client-side so streak-fresh users appear immediately.
-     Also adds secondary sort by totalWater as tie-breaker.
+  /* ── Global leaderboard: getDocs + localStorage cache (no onSnapshot) ──
+     Replaces the real-time listener with a TTL-cached getDocs call.
+     Saves significant Firestore reads — the leaderboard only needs
+     to be fresh, not instant. Cache TTL = 5 min. Debounce = 400ms.
      ─────────────────────────────────────────────────────────────── */
-  let _unsubscribe = null;
-  const subscribe = (type, callback) => {
-    if (_unsubscribe) { _unsubscribe(); _unsubscribe = null; }
-    const field = type === 'daily' ? 'dailyStreak' : 'monthlyStreak';
+  const _LB_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  const _LB_MAX = 50; // max rows to fetch (pagination)
 
-    // Wait for Firebase to be ready before attaching listener
-    const _attach = async () => {
+  const _lbCacheKey = (type) => `wt_lb_cache_${type}_v2`;
+  const _lbCacheRead = (type) => {
+    try {
+      const raw = localStorage.getItem(_lbCacheKey(type));
+      if (!raw) return null;
+      const p = JSON.parse(raw);
+      if (Date.now() - p.ts > _LB_CACHE_TTL) return null;
+      return p.rows;
+    } catch { return null; }
+  };
+  const _lbCacheWrite = (type, rows) => {
+    try { localStorage.setItem(_lbCacheKey(type), JSON.stringify({ ts: Date.now(), rows })); } catch {}
+  };
+
+  const _processRows = (docs, field) =>
+    docs.map(d => ({ uid: d.id, ...d.data() }))
+      .filter(r => !r.flagged)
+      .sort((a, b) => {
+        const sd = (b[field]||0) - (a[field]||0);
+        return sd !== 0 ? sd : (b.totalWater||0) - (a.totalWater||0);
+      })
+      .slice(0, 20)
+      .map((r, i) => ({ ...r, rank: i + 1 }));
+
+  const _fetchGlobalLeaderboard = async (type) => {
+    if (!window.firebase || !firebase.apps?.length) return [];
+    const field = type === 'daily' ? 'dailyStreak' : 'monthlyStreak';
+    const userGoalBucket = goalBucket(LocalStorage.getGoal() || 2500);
+    try {
+      const snap = await db().collection('leaderboard')
+        .where('flagged', '==', false)
+        .where('goalBucket', '==', userGoalBucket)
+        .orderBy(field, 'desc')
+        .limit(_LB_MAX)
+        .get();
+      return _processRows(snap.docs, field);
+    } catch (e) {
+      console.warn('[Leaderboard] fetch failed, trying without flagged filter:', e.message);
+      try {
+        const snap2 = await db().collection('leaderboard')
+          .where('goalBucket', '==', userGoalBucket)
+          .orderBy(field, 'desc').limit(_LB_MAX).get();
+        return _processRows(snap2.docs, field);
+      } catch (e2) {
+        console.warn('[Leaderboard] fallback also failed:', e2.message);
+        return [];
+      }
+    }
+  };
+
+  let _unsubscribe = null;
+  let _subDebounceTimer = null;
+
+  const subscribe = (type, callback) => {
+    // Cancel previous subscription
+    if (_unsubscribe) { _unsubscribe(); _unsubscribe = null; }
+    clearTimeout(_subDebounceTimer);
+
+    let _cancelled = false;
+    _unsubscribe = () => { _cancelled = true; clearTimeout(_subDebounceTimer); };
+
+    const _load = async (forceRefresh) => {
+      if (_cancelled) return;
+      // 1. Serve cache immediately (zero reads)
+      if (!forceRefresh) {
+        const cached = _lbCacheRead(type);
+        if (cached) { callback(cached); return; }
+      }
+      // 2. Wait for Firebase
       if (window.Firebase) {
         const ready = await Firebase.waitUntilReady(6000);
-        if (!ready) { console.warn('[Leaderboard] Firebase not ready'); callback([]); return; }
+        if (!ready || _cancelled) { callback([]); return; }
       }
-      try {
-        const userGoalBucket = goalBucket(LocalStorage.getGoal() || 2500);
-        _unsubscribe = db().collection('leaderboard')
-          .where('flagged', '==', false)
-          .where('goalBucket', '==', userGoalBucket)
-          .orderBy(field, 'desc')
-          .limit(50)
-          .onSnapshot(snap => {
-            const rows = snap.docs
-              .map((d, i) => ({ uid: d.id, ...d.data() }))
-              .filter(r => !r.flagged)
-              .sort((a, b) => {
-                const streakDiff = (b[field] || 0) - (a[field] || 0);
-                if (streakDiff !== 0) return streakDiff;
-                return (b.totalWater || 0) - (a.totalWater || 0);
-              })
-              .slice(0, 20)
-              .map((r, i) => ({ ...r, rank: i + 1 }));
-            callback(rows);
-          }, async err => {
-            console.warn('[Leaderboard] onSnapshot error:', err.message, err.code);
-            // Fallback: one-time fetch without flagged filter (works for old docs too)
-            try {
-              const snap2 = await db().collection('leaderboard')
-                .where('goalBucket', '==', userGoalBucket)
-                .orderBy(field, 'desc').limit(50).get();
-              const rows = snap2.docs
-                .map(d => ({ uid: d.id, ...d.data() }))
-                .filter(r => !r.flagged)
-                .sort((a, b) => {
-                  const streakDiff = (b[field] || 0) - (a[field] || 0);
-                  if (streakDiff !== 0) return streakDiff;
-                  return (b.totalWater || 0) - (a.totalWater || 0);
-                })
-                .slice(0, 20)
-                .map((r, i) => ({ ...r, rank: i + 1 }));
-              callback(rows);
-            } catch (e2) {
-              console.warn('[Leaderboard] fallback fetch failed:', e2.message);
-              callback([]);
-            }
-          });
-      } catch (e) {
-        console.warn('[Leaderboard] subscribe failed:', e.message);
-        // Fallback: one-time fetch without flagged filter
-        try {
-          const userGoalBucket2 = goalBucket(LocalStorage.getGoal() || 2500);
-          const snap2 = await db().collection('leaderboard')
-            .where('goalBucket', '==', userGoalBucket2)
-            .orderBy(field, 'desc').limit(50).get();
-          const rows = snap2.docs
-            .map(d => ({ uid: d.id, ...d.data() }))
-            .filter(r => !r.flagged)
-            .sort((a, b) => {
-              const streakDiff = (b[field] || 0) - (a[field] || 0);
-              if (streakDiff !== 0) return streakDiff;
-              return (b.totalWater || 0) - (a.totalWater || 0);
-            })
-            .slice(0, 20)
-            .map((r, i) => ({ ...r, rank: i + 1 }));
-          callback(rows);
-        } catch (e2) {
-          console.warn('[Leaderboard] fallback also failed:', e2.message);
-          callback([]);
-        }
-      }
+      // 3. One getDocs fetch
+      const rows = await _fetchGlobalLeaderboard(type);
+      if (_cancelled) return;
+      _lbCacheWrite(type, rows);
+      callback(rows);
     };
-    _attach();
+
+    // Debounced initial load
+    _subDebounceTimer = setTimeout(() => _load(false), 400);
+
+    // Return a manual refresh function wrapped as the "unsubscribe"
+    // Callers can re-call subscribe() to force refresh
+    return _unsubscribe;
   };
 
   const unsubscribe = () => { if (_unsubscribe) { _unsubscribe(); _unsubscribe = null; } };

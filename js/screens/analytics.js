@@ -7,8 +7,19 @@ const AnalyticsScreen = (() => {
   let chartData   = [];       // { date, total } sorted asc
 
   /* ── Init ── */
+  let _activeFamilyUnsub = null;
   const init = () => {
-    Router.on('analytics', () => render());
+    Router.on('analytics', () => {
+      // Clean up previous family leaderboard listener before re-render
+      if (_activeFamilyUnsub) { _activeFamilyUnsub(); _activeFamilyUnsub = null; }
+      render();
+    });
+    // Clean up when navigating away from analytics
+    ['home','history','achievements','settings','shop','reminder'].forEach(screen => {
+      Router.on(screen, () => {
+        if (_activeFamilyUnsub) { _activeFamilyUnsub(); _activeFamilyUnsub = null; }
+      });
+    });
   };
 
   /* ── Render shell ── */
@@ -490,13 +501,10 @@ const AnalyticsScreen = (() => {
 
     // Real-time listener — wait for Firebase to be ready, then load leaderboard
     const _startLeaderboard = async () => {
-      // Use Firebase.waitUntilReady() which polls db + userId
-      if (window.Firebase) await Firebase.waitUntilReady(6000);
-
-      // First publish current user's streak
-      if (currentUid) Leaderboard.publishStreak(currentUid).catch(()=>{});
-
-      _lbUnsub = Leaderboard.subscribe(type, (rows) => {
+      try {
+        if (window.Firebase) await Firebase.waitUntilReady(6000);
+        if (currentUid) Leaderboard.publishStreak(currentUid).catch(()=>{});
+        _lbUnsub = Leaderboard.subscribe(type, (rows) => {
         console.log('[Analytics] Leaderboard callback rows:', rows?.length, rows);
         const container = Utils.el('lbRows');
         if (!container) return;
@@ -535,68 +543,118 @@ const AnalyticsScreen = (() => {
             </div>
           `;
         }).join('');
-      });
+        });
+      } catch(e) {
+        console.error('[Analytics] Leaderboard failed:', e.message);
+        const c = Utils.el('lbRows');
+        if (c) c.innerHTML = '<div style="text-align:center;padding:16px;color:var(--md-on-surface-med);font-size:13px;">Could not load leaderboard. Try again.</div>';
+      }
     };
-    _startLeaderboard();
+    _startLeaderboard().catch(e => console.error('[Analytics] _startLeaderboard threw:', e.message));
   };
 
   const renderFamilyLeaderboard = async () => {
     const tile = Utils.el('familyLeaderboardTile');
     if (!tile || !window.UserData) return;
     const state = UserData.getState();
+    const myUid = window.Firebase ? Firebase.getUserId() : null;
+    const memberUids = state.familyMembers || [];
+    const baseUrl = window.location.origin + window.location.pathname;
+    const inviteLink = myUid ? `${baseUrl}?joinFamily=${myUid}` : null;
+
     tile.innerHTML = `
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;">
         <div>
           <div style="font-size:15px;font-weight:700;color:var(--md-on-background);">👨‍👩‍👧‍👦 Family Leaderboard</div>
-          <div style="font-size:12px;color:var(--md-on-surface-med);margin-top:2px;">Add members using Gmail IDs and compare streaks privately.</div>
+          <div style="font-size:12px;color:var(--md-on-surface-med);margin-top:2px;">Your personal network — ranked by streak, goal & completion.</div>
         </div>
-        <button id="showFamilyAdd" class="family-add-btn">Add Member to Family</button>
+        ${inviteLink ? `<button id="familyCopyInvite" class="family-add-btn" style="white-space:nowrap;flex-shrink:0;">🔗 Invite</button>` : ''}
       </div>
-      <div id="familyAddWrap" class="family-add-wrap" style="display:none;">
-        <input id="familyEmailInput" class="md-input" type="email" placeholder="name@gmail.com" />
-        <button id="familySaveBtn" class="md-btn md-btn--filled">Add</button>
+
+      ${memberUids.length > 0 ? `
+      <div id="familyRoster" class="family-roster" style="margin-bottom:10px;">
+        ${memberUids.map(uid => `<span class="family-roster__chip" style="font-size:11px;cursor:default;">👤 <span class="fam-name-${uid}">${uid.slice(0,8)}…</span></span>`).join('')}
+      </div>` : ''}
+
+      <div id="familyRows" style="display:flex;flex-direction:column;gap:8px;margin-top:4px;">
+        <div class="an-loading" style="padding:12px 0;text-align:center;font-size:13px;color:var(--md-on-surface-med);">⏳ Loading…</div>
       </div>
-      <div id="familyRoster" class="family-roster">${(state.familyMembers || []).map((email) => `<span class="family-roster__chip">${Utils.escapeHtml(email)}</span>`).join('')}</div>
-      <div id="familyRows" style="display:flex;flex-direction:column;gap:8px;margin-top:12px;"></div>
     `;
 
-    tile.querySelector('#showFamilyAdd')?.addEventListener('click', () => {
-      const wrap = tile.querySelector('#familyAddWrap');
-      wrap.style.display = wrap.style.display === 'none' ? 'grid' : 'none';
+    // Copy invite link
+    tile.querySelector('#familyCopyInvite')?.addEventListener('click', () => {
+      if (!inviteLink) return;
+      navigator.clipboard.writeText(inviteLink)
+        .then(() => Utils.showToast('✅ Invite link copied!'))
+        .catch(() => {
+          const el = document.createElement('textarea');
+          el.value = inviteLink; document.body.appendChild(el);
+          el.select(); document.execCommand('copy'); el.remove();
+          Utils.showToast('✅ Invite link copied!');
+        });
     });
 
-    tile.querySelector('#familySaveBtn')?.addEventListener('click', async () => {
-      const email = tile.querySelector('#familyEmailInput')?.value || '';
-      try {
-        await UserData.addFamilyMember(email);
-        Utils.showToast('Family member added.');
-        renderFamilyLeaderboard();
-      } catch (e) {
-        Utils.showToast(e.message);
-      }
-    });
-
-    const rows = await UserData.fetchFamilyLeaderboard();
-    const rowsEl = tile.querySelector('#familyRows');
-    if (!rows.length) {
-      rowsEl.innerHTML = '<div class="an-empty" style="padding:12px 0;">Add your first family member to get started.</div>';
-      return;
+    // Resolve member names asynchronously
+    if (memberUids.length > 0 && window.firebase) {
+      memberUids.forEach(async (uid) => {
+        try {
+          const doc = await firebase.firestore().collection('users').doc(uid).get();
+          const name = doc.exists
+            ? (doc.data()?.displayName || doc.data()?.email?.split('@')[0] || uid.slice(0,8))
+            : uid.slice(0,8);
+          tile.querySelectorAll(`.fam-name-${uid}`).forEach(el => { el.textContent = name; });
+        } catch(e) {}
+      });
     }
 
-    rowsEl.innerHTML = rows.map((row) => `
-      <div class="lb-row ${row.email === Auth.getSession()?.email ? 'lb-row--me' : ''}">
-        <div class="lb-medal lb-medal--num">${row.rank}</div>
-        ${window.Frames ? Frames.avatarWithFrame(row.photoURL || null, row.displayName || row.email || '?', 38, row.uid === currentUid ? null : (row.equippedFrame || false)) : (window.Profile ? Profile.avatarHTML(row.photoURL || null, row.displayName || row.email || '?', 38) : '')}
-        <div class="lb-info">
-          <div class="lb-name">${Utils.escapeHtml(row.displayName || row.email || 'Member')}</div>
-          <div class="lb-sub">${Utils.escapeHtml(row.email || '')}</div>
-        </div>
-        <div class="lb-streak">
-          <div class="lb-streak-num">${row.dailyStreak || 0}</div>
-          <div class="lb-streak-icon">daily streak</div>
-        </div>
-      </div>
-    `).join('');
+    const rowsEl = tile.querySelector('#familyRows');
+    const renderRows = (rows) => {
+      if (!rowsEl) return;
+      if (!rows.length) {
+        rowsEl.innerHTML = `
+          <div style="text-align:center;padding:20px 0;">
+            <div style="font-size:32px;margin-bottom:8px;">👥</div>
+            <div style="font-size:13px;color:var(--md-on-surface-med);">No family members yet.</div>
+            ${inviteLink ? `<div style="font-size:12px;color:var(--md-on-surface-med);margin-top:4px;">Share your invite link to get started!</div>` : ''}
+          </div>`;
+        return;
+      }
+
+      rowsEl.innerHTML = rows.map((row) => {
+        const isMe = row.uid === myUid;
+        const streak = row.dailyStreak || 0;
+        const goalPct = row.goal ? Math.round(((row.waterIntakeToday || 0) / row.goal) * 100) : 0;
+        const medal = row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : row.rank;
+        const avatar = (window.Frames && row.equippedFrame)
+          ? Frames.avatarWithFrame(row.photoURL || null, row.displayName || '?', 38, row.equippedFrame)
+          : (window.Profile
+            ? Profile.avatarHTML(row.photoURL || null, row.displayName || '?', 38)
+            : `<div style="width:38px;height:38px;border-radius:50%;background:var(--md-primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex-shrink:0;">${(row.displayName||'?').charAt(0).toUpperCase()}</div>`);
+
+        return `
+          <div class="lb-row${isMe ? ' lb-row--me' : ''}">
+            <div class="lb-medal${row.rank > 3 ? ' lb-medal--num' : ''}">${medal}</div>
+            ${avatar}
+            <div class="lb-info">
+              <div class="lb-name">${Utils.escapeHtml(row.displayName || 'Member')}${isMe ? ' <span style="opacity:0.55;font-size:10px;">(you)</span>' : ''}</div>
+              <div class="lb-sub">Goal: ${row.goal || '—'} ml · Today: ${goalPct}%</div>
+            </div>
+            <div class="lb-streak">
+              <div class="lb-streak-num${streak === 0 ? ' lb-streak-num--zero' : ''}">${streak}</div>
+              <div class="lb-streak-icon">🔥</div>
+            </div>
+          </div>`;
+      }).join('');
+    };
+
+    // Initial load
+    const initialRows = await UserData.fetchFamilyLeaderboard();
+    renderRows(initialRows);
+
+    // Subscribe to real-time updates (single own-doc listener + debounced refresh)
+    if (UserData.subscribeToFamilyLeaderboard) {
+      _activeFamilyUnsub = UserData.subscribeToFamilyLeaderboard(renderRows);
+    }
   };
 
   /* ── Monthly Report Tile (Pro only) ── */
@@ -604,9 +662,7 @@ const AnalyticsScreen = (() => {
     const tile = Utils.el('anReportTile');
     if (!tile) return;
     const role = window.Utils?.getRole ? Utils.getRole() : (Auth.getSession()?.role || 'user').toLowerCase().trim();
-    const email = (Auth.getSession()?.email || '').toLowerCase().trim();
-    const isMaggie = email.startsWith('sampadagupta') && email.endsWith('@gmail.com');
-    const isPro = isMaggie || ['pro','admin','maggie'].includes(role) || window.Utils?.isPrivileged?.();
+    const isPro = role === 'pro' || role === 'admin';
 
     if (!isPro) {
       tile.innerHTML = `

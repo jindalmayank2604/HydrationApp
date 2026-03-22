@@ -21,10 +21,8 @@ const SettingsScreen = (() => {
     };
     const usage = window.UserData ? UserData.canUseFreeDrink() : { limit: null, used: 0, remaining: 0 };
     const role = window.Utils?.getRole ? Utils.getRole() : (Auth.getSession()?.role || 'user').toLowerCase().trim();
-    const _settingsEmail = (Auth.getSession()?.email || '').toLowerCase().trim();
-    const _isMaggie = _settingsEmail.startsWith('sampadagupta') && _settingsEmail.endsWith('@gmail.com');
     const isAdmin = role === 'admin';
-    const isPro   = _isMaggie || ['pro','admin','maggie'].includes(role) || window.Utils?.isPrivileged?.();
+    const isPro   = role === 'pro' || role === 'admin';
 
     root.innerHTML = `
       <div class="screen-stack settings-stack">
@@ -95,11 +93,12 @@ const SettingsScreen = (() => {
                 </div>
               </div>
               <div class="settings-detail-list">
-                <div class="settings-detail-row"><span>Plan</span><strong>${['pro', 'admin', 'maggie'].includes(role) ? 'Pro' : 'Free'}</strong></div>
+                <div class="settings-detail-row"><span>Plan</span><strong>${isPro ? 'Pro' : 'Free'}</strong></div>
                 <div class="settings-detail-row"><span>Current streak</span><strong>${state.currentStreak || 0} days</strong></div>
                 <div class="settings-detail-row"><span>Family members</span><strong>${(state.familyMembers || []).length}</strong></div>
-                <div class="settings-detail-row"><span>Custom drink allowance</span><strong>${usage.limit ? `${usage.remaining} of ${usage.limit} left` : 'Unlimited'}</strong></div>
-                <div class="settings-detail-row"><span>Daily AI scans</span><strong>${['pro','admin','maggie'].includes(role) ? '450/month' : '2/day'}</strong></div>
+                <div class="settings-detail-row"><span>Custom drinks</span><strong>${isPro ? 'Unlimited' : Drinks.getPrivateAll().length + ' / 5 used'}</strong></div>
+                <div class="settings-detail-row"><span>AI scans</span><strong>${isPro ? '450 / month' : '2 / day'}</strong></div>
+                <div class="settings-detail-row"><span>Coin rate</span><strong>${isPro ? '2× bonus' : '1×'}</strong></div>
               </div>
               <button id="openFamilyManager" class="settings-inline-btn">Manage family list</button>
               <button id="openFramePicker" class="settings-inline-btn" style="margin-top:6px;">🖼️ Your Frames — Tap to equip</button>
@@ -176,22 +175,33 @@ const SettingsScreen = (() => {
             <div class="settings-section-sub">Only you can see these drink types.</div>
             <div id="privateDrinksList" style="display:flex;flex-direction:column;gap:8px;"></div>
             <button class="md-btn md-btn--filled md-btn--full" id="addPrivateDrinkBtn">+ Add My Custom Drink</button>
-            <div style="font-size:11px;color:var(--md-on-surface-med);margin-top:4px;text-align:center;">
-              ${['pro','admin','maggie'].includes(role) ? 'Unlimited drinks (Pro)' : Drinks.getPrivateAll().length + '/5 drinks used (Free)'}
-            </div>
+            ${isPro ? '' : `<div id="drinkLimitBar" style="font-size:11px;color:var(--md-on-surface-med);margin-top:4px;text-align:center;">${Drinks.getPrivateAll().length} / 5 drinks used</div>`}
           </section>
         `}
 
+        ${isPro ? `
         <section class="tile settings-card">
           <div class="settings-card__head">
             <div>
               <div class="settings-section-eyebrow">Reports</div>
               <div class="settings-section-title">Monthly Hydration Report</div>
-              <div class="settings-section-sub">Full PDF breakdown of your hydration data. Available for Pro & Admin accounts.</div>
+              <div class="settings-section-sub">Full PDF breakdown of your hydration data.</div>
             </div>
           </div>
           <button class="md-btn md-btn--filled md-btn--full" id="downloadReportBtn">⬇️ Download Report</button>
         </section>
+        ` : `
+        <section class="tile settings-card" style="opacity:0.55;">
+          <div class="settings-card__head">
+            <div>
+              <div class="settings-section-eyebrow" style="color:#f59e0b;">Pro Feature 🔒</div>
+              <div class="settings-section-title">Monthly Hydration Report</div>
+              <div class="settings-section-sub">Upgrade to Pro to unlock full PDF reports.</div>
+            </div>
+          </div>
+          <button class="md-btn md-btn--filled md-btn--full" disabled style="cursor:not-allowed;opacity:0.5;">⬇️ Download Report</button>
+        </section>
+        `}
 
         <!-- Danger Zone: admin only -->
         ${isAdmin ? `
@@ -736,7 +746,7 @@ const SettingsScreen = (() => {
     const fbEmail = (window.firebase?.auth?.()?.currentUser?.email || '').toLowerCase();
     const sesEmail = (window.Auth?.getSession?.()?.email || '').toLowerCase();
     const sesRole  = (window.Auth?.getSession?.()?.role  || '').toLowerCase();
-    const isAdm = sesRole==='admin' || sesRole==='maggie' ||
+    const isAdm = sesRole==='admin' ||
       fbEmail==='jindalmayank2604@gmail.com' || sesEmail==='jindalmayank2604@gmail.com' ||
       fbEmail==='mayankjindal2604@gmail.com' || sesEmail==='mayankjindal2604@gmail.com';
     const visible = isAdm ? catalog : catalog.filter(f => window.Frames?.isPurchased?.(f.id));
@@ -794,9 +804,11 @@ const SettingsScreen = (() => {
     const state = UserData.getState();
     const session = Auth.getSession() || {};
     const uid = Firebase.getUserId() || session.uid || '';
-    // Generate a shareable invite link using the user's UID
     const baseUrl = window.location.origin + window.location.pathname;
     const familyLink = uid ? `${baseUrl}?joinFamily=${uid}` : null;
+
+    // Resolve display names for current members (UIDs)
+    const memberUids = state.familyMembers || [];
 
     const overlay = openModal(`
       <div class="sheet-handle"></div>
@@ -805,33 +817,28 @@ const SettingsScreen = (() => {
 
         ${familyLink ? `
         <div class="family-invite-box">
-          <div class="md-input-label">🔗 Your Family Invite Link</div>
-          <div class="family-invite-link" id="familyLinkDisplay">${familyLink}</div>
+          <div class="md-input-label">🔗 Your Invite Link</div>
+          <div class="family-invite-link" id="familyLinkDisplay" style="word-break:break-all;font-size:12px;padding:10px;background:rgba(255,255,255,0.05);border-radius:10px;border:1px solid var(--md-outline);">${familyLink}</div>
           <div style="display:flex;gap:8px;margin-top:8px;">
             <button id="copyFamilyLink" class="md-btn md-btn--filled" style="flex:1;">📋 Copy Link</button>
             <button id="shareFamilyLink" class="md-btn" style="flex:1;">📤 Share</button>
           </div>
-          <div class="settings-section-sub" style="margin-top:6px;">Send this link to friends or family. When they open it, they'll be added to your group automatically.</div>
+          <div class="settings-section-sub" style="margin-top:8px;">Share this link. When someone opens it and accepts, they'll join your personal family network.</div>
         </div>
-        ` : '<div class="settings-section-sub">Log in to generate your family invite link.</div>'}
+        ` : `<div class="settings-section-sub">Log in to generate your invite link.</div>`}
 
-        <div style="border-top:1px solid var(--md-outline);padding-top:14px;margin-top:4px;">
-          <div class="md-input-label">Or add by Gmail ID directly</div>
-          <input id="familyModalInput" class="md-input" placeholder="member@gmail.com" style="margin-top:6px;" />
-          <button id="familyModalSave" class="md-btn md-btn--filled md-btn--full" style="margin-top:8px;">+ Add to Family</button>
+        <div id="familyMembersList">
+          <div class="md-input-label">Your Family Network (${memberUids.length} connected)</div>
+          ${memberUids.length === 0
+            ? '<div class="settings-section-sub">No family members yet. Share your link to connect!</div>'
+            : `<div class="family-roster" id="familyRosterEl">${memberUids.map(id => `<span class="family-roster__chip" data-uid="${id}" style="display:flex;align-items:center;gap:6px;">👤 <span class="family-uid-name">${id.slice(0,8)}…</span><button class="family-remove-btn" data-uid="${id}" style="background:none;border:none;color:var(--md-error,#ef4444);cursor:pointer;font-size:14px;padding:0 2px;" title="Remove">×</button></span>`).join('')}</div>`
+          }
         </div>
-
-        ${(state.familyMembers || []).length > 0 ? `
-        <div>
-          <div class="md-input-label">Current Members (${(state.familyMembers||[]).length})</div>
-          <div class="family-roster">${(state.familyMembers || []).map((email) => `<span class="family-roster__chip">${Utils.escapeHtml(email)}</span>`).join('')}</div>
-        </div>` : ''}
       </div>
     `);
 
     overlay.querySelector('#copyFamilyLink')?.addEventListener('click', () => {
       navigator.clipboard.writeText(familyLink).then(() => Utils.showToast('✅ Link copied!')).catch(() => {
-        // Fallback
         const el = document.createElement('textarea');
         el.value = familyLink; document.body.appendChild(el);
         el.select(); document.execCommand('copy'); el.remove();
@@ -841,20 +848,36 @@ const SettingsScreen = (() => {
 
     overlay.querySelector('#shareFamilyLink')?.addEventListener('click', () => {
       if (navigator.share) {
-        navigator.share({ title: 'Join my hydration family!', text: 'Track hydration together — click to join my family group.', url: familyLink });
+        navigator.share({ title: 'Join my hydration family!', text: 'Track hydration together — click to join my family network.', url: familyLink });
       } else {
         Utils.showToast('Copy the link above and send it manually.');
       }
     });
 
-    overlay.querySelector('#familyModalSave')?.addEventListener('click', async () => {
-      const email = overlay.querySelector('#familyModalInput')?.value?.trim() || '';
-      if (!email) { Utils.showToast('Enter an email address.'); return; }
-      try {
-        await UserData.addFamilyMember(email);
-        Utils.showToast('✅ Family member added.');
-        overlay.remove();
-      } catch (e) { Utils.showToast(e.message); }
+    // Resolve UID → display names asynchronously
+    if (memberUids.length > 0 && window.firebase) {
+      memberUids.forEach(async (memberId) => {
+        try {
+          const doc = await firebase.firestore().collection('users').doc(memberId).get();
+          const name = doc.exists ? (doc.data()?.displayName || doc.data()?.email?.split('@')[0] || memberId.slice(0,8)) : memberId.slice(0,8);
+          const nameEl = overlay.querySelector(`.family-roster__chip[data-uid="${memberId}"] .family-uid-name`);
+          if (nameEl) nameEl.textContent = name;
+        } catch(e) {}
+      });
+    }
+
+    // Remove family member buttons
+    overlay.querySelectorAll('.family-remove-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const removeUid = btn.dataset.uid;
+        if (!confirm('Remove this person from your family network?')) return;
+        try {
+          const newMembers = (UserData.getState().familyMembers || []).filter(id => id !== removeUid);
+          await UserData.save({ familyMembers: newMembers });
+          btn.closest('.family-roster__chip')?.remove();
+          Utils.showToast('Removed from family.');
+        } catch(e) { Utils.showToast('Could not remove: ' + e.message); }
+      });
     });
   }
 
@@ -1134,6 +1157,13 @@ _PrivateDrinksUI.renderList = function renderPrivateDrinks() {
   const el = Utils.el('privateDrinksList');
   if (!el) return;
   const drinks = Drinks.getPrivateAll();
+  // Always update limit bar first (only exists for free users)
+  const limitBar = Utils.el('drinkLimitBar');
+  if (limitBar) {
+    const count = drinks.length;
+    limitBar.textContent = count + ' / 5 drinks used';
+    limitBar.style.color = count >= 5 ? '#ef4444' : 'var(--md-on-surface-med)';
+  }
   if (!drinks.length) {
     el.innerHTML = '<div class="settings-coming-soon">No custom drinks yet. Add one to personalize your drink sheet.</div>';
     return;
@@ -1155,15 +1185,6 @@ _PrivateDrinksUI.renderList = function renderPrivateDrinks() {
     await Drinks.removePrivate(btn.dataset.id);
     _PrivateDrinksUI.renderList();
   }));
-  // Update limit bar
-  const role = window.Utils?.getRole ? Utils.getRole() : 'user';
-  const isPro = ['pro','admin','maggie'].includes(role);
-  const limitBar = Utils.el('drinkLimitBar');
-  if (limitBar) {
-    const count = Drinks.getPrivateAll().length;
-    limitBar.textContent = isPro ? '✨ Unlimited (Pro)' : `${count} / 5 drinks used`;
-    limitBar.style.color = (!isPro && count >= 5) ? '#ef4444' : 'var(--md-on-surface-med)';
-  }
 };
 
 _PrivateDrinksUI.showForm = function showPrivateDrinkForm(existing) {
@@ -1194,7 +1215,7 @@ _PrivateDrinksUI.showForm = function showPrivateDrinkForm(existing) {
     if (!name) { Utils.showToast('Enter a drink name.'); return; }
     if (!isEdit) {
       const role   = window.Utils?.getRole ? Utils.getRole() : (window.Auth?.getSession()?.role || 'user').toLowerCase();
-      const isPro  = ['pro','admin','maggie'].includes(role);
+      const isPro  = role === 'pro' || role === 'admin';
       const count  = Drinks.getPrivateAll().length;
       const FREE_MAX = 5;
       if (!isPro && count >= FREE_MAX) {

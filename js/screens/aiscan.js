@@ -1183,8 +1183,56 @@ const analyseColour = (imgElement) => {
     // Start idle timer immediately
     resetFabIdle();
 
+    /* ── Scroll-hide: hide FAB on aggressive scroll, reappear on edge-swipe ── */
+    let _fabHiddenByScroll = false;
+    let _lastScrollY = window.scrollY;
+    let _scrollVelTimer = null;
+
+    const hideFabByScroll = () => {
+      if (_fabHiddenByScroll || dragging) return;
+      _fabHiddenByScroll = true;
+      fab.style.opacity = '0';
+      fab.style.transform = 'scale(0.7)';
+      fab.style.pointerEvents = 'none';
+      fab.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+    };
+
+    const showFabAfterScroll = () => {
+      if (!_fabHiddenByScroll) return;
+      _fabHiddenByScroll = false;
+      fab.style.opacity = FAB_ACTIVE_OPACITY;
+      fab.style.transform = '';
+      fab.style.pointerEvents = '';
+      fab.style.transition = 'opacity 0.35s cubic-bezier(0.34,1.2,0.64,1), transform 0.35s cubic-bezier(0.34,1.2,0.64,1)';
+      resetFabIdle();
+    };
+
+    const SCROLL_VEL_THRESHOLD = 8; // px/frame considered "aggressive"
+    let _scrollFrameY = window.scrollY;
+    let _scrollRafId = null;
+    const _scrollTrack = () => {
+      const dy = Math.abs(window.scrollY - _scrollFrameY);
+      _scrollFrameY = window.scrollY;
+      if (dy > SCROLL_VEL_THRESHOLD) {
+        hideFabByScroll();
+        clearTimeout(_scrollVelTimer);
+        _scrollVelTimer = setTimeout(showFabAfterScroll, 800);
+      }
+      _scrollRafId = requestAnimationFrame(_scrollTrack);
+    };
+    _scrollRafId = requestAnimationFrame(_scrollTrack);
+
+    // Edge swipe to reappear: touch starting near left/right edge
+    document.addEventListener('touchstart', (e) => {
+      const x = e.touches[0].clientX;
+      const W = window.innerWidth;
+      if (x < 28 || x > W - 28) {
+        showFabAfterScroll();
+      }
+    }, { passive: true });
+
     // Reset on any user interaction with the page
-    ['pointerdown','pointermove','keydown','scroll','touchstart'].forEach(evt => {
+    ['pointerdown','keydown','touchstart'].forEach(evt => {
       document.addEventListener(evt, resetFabIdle, { passive: true });
     });
 
@@ -1197,8 +1245,10 @@ const analyseColour = (imgElement) => {
           fab.style.pointerEvents = 'none';
           fab.style.transition = 'opacity 0.2s ease';
         } else {
-          fab.style.pointerEvents = '';
-          resetFabIdle();
+          if (!_fabHiddenByScroll) {
+            fab.style.pointerEvents = '';
+            resetFabIdle();
+          }
         }
       });
       _orbitObserver.observe(orbitNav, { attributes: true, attributeFilter: ['class'] });
@@ -1225,6 +1275,8 @@ const analyseColour = (imgElement) => {
       const c = clamp(fabX + dx, fabY + dy);
       fab.style.left = c.x + 'px'; fab.style.top = c.y + 'px';
     };
+    const PEEK_OFFSET = SIZE * 0.45; // how much to peek off-screen when snapped to edge
+
     const onEnd = () => {
       if (!dragging) return;
       dragging = false;
@@ -1232,12 +1284,26 @@ const analyseColour = (imgElement) => {
       if (moved) {
         const cx = parseInt(fab.style.left), cy = parseInt(fab.style.top);
         const mid = window.innerWidth / 2;
-        const snapX = (cx + SIZE/2) < mid ? MARGIN : window.innerWidth - SIZE - MARGIN;
-        const s = clamp(snapX, cy);
-        fab.style.transition = 'left 0.35s cubic-bezier(0.22,1,0.36,1), top 0.35s cubic-bezier(0.22,1,0.36,1)';
-        fab.style.left = s.x + 'px'; fab.style.top = s.y + 'px';
+        const onLeft = (cx + SIZE/2) < mid;
+        // Snap to edge and peek halfway off screen
+        const snapX = onLeft ? -PEEK_OFFSET : window.innerWidth - SIZE + PEEK_OFFSET;
+        const s = clamp(onLeft ? MARGIN : window.innerWidth - SIZE - MARGIN, cy);
+        fab.style.transition = 'left 0.35s cubic-bezier(0.22,1,0.36,1), top 0.35s cubic-bezier(0.22,1,0.36,1), opacity 0.3s ease';
+        fab.style.left = snapX + 'px'; fab.style.top = s.y + 'px';
+        fab.style.opacity = '0.55';
         savePos(s.x, s.y);
-        setTimeout(() => { fab.style.transition = ''; }, 400);
+        // Touch edge to restore
+        const restoreFromEdge = () => {
+          fab.style.transition = 'left 0.4s cubic-bezier(0.34,1.2,0.64,1), opacity 0.3s ease';
+          fab.style.left = s.x + 'px';
+          fab.style.opacity = '1';
+          resetFabIdle();
+          fab.removeEventListener('touchstart', restoreFromEdge);
+          fab.removeEventListener('mousedown', restoreFromEdge);
+        };
+        fab.addEventListener('touchstart', restoreFromEdge, { once: true });
+        fab.addEventListener('mousedown', restoreFromEdge, { once: true });
+        setTimeout(() => { fab.style.transition = ''; }, 500);
       } else {
         showScanModal();
       }

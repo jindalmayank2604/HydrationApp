@@ -126,6 +126,21 @@ body {
 
 .nav-item.active .nav-label { color: var(--md-primary-dark); font-weight: 700; }
 
+.nav-item:hover .nav-icon {
+  background: rgba(26,115,232,0.12);
+  color: var(--md-primary, #1a73e8);
+}
+.nav-item:hover .nav-label {
+  color: var(--md-primary, #1a73e8);
+  font-weight: 600;
+}
+.nav-item:hover {
+  background: rgba(26,115,232,0.05);
+  border-radius: 12px;
+}
+
+
+
 /* ── SCREENS ── */
 .screen { display: none; }
 .screen.active {

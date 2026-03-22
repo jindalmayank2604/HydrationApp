@@ -37,14 +37,13 @@ const AchievementsScreen = (() => {
           </div>
           <div class="achievement-progress-card__legend">
             <span>Next milestone: ${nextMilestone?.streak || state.currentStreak} days</span>
-            <span>🪙 ${nextMilestone?.reward || 0} coins</span>
           </div>
           <div class="achievement-track">
             ${milestones.map((milestone) => `
               <button class="achievement-node ${milestone.claimed ? 'is-claimed' : milestone.unlocked ? 'is-unlocked' : ''}" data-streak="${milestone.streak}">
                 <span class="achievement-node__spark"></span>
                 <span class="achievement-node__day">${milestone.streak}</span>
-                <span class="achievement-node__coin">🪙 ${milestone.reward}</span>
+                <span class="achievement-node__coin" style="display:flex;align-items:center;gap:2px;white-space:nowrap;">🪙 ${milestone.reward}<span style="opacity:0.4;font-size:10px;">|</span><span style="background:linear-gradient(135deg,#f59e0b,#fbbf24);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-weight:800;filter:drop-shadow(0 0 4px rgba(251,191,36,0.6));">${milestone.reward * 2}</span><span style="font-size:8px;opacity:0.5;-webkit-text-fill-color:var(--md-on-surface-med);">pro</span></span>
                 <span class="achievement-node__status">${milestone.claimed ? 'Claimed' : milestone.unlocked ? 'Claim now' : 'Locked'}</span>
               </button>
             `).join('')}
@@ -56,14 +55,14 @@ const AchievementsScreen = (() => {
             <div class="settings-section-title">Workout Boost</div>
             <div class="settings-section-sub">Your hydration target updates from age, height, gender, and workout intensity.</div>
             <div class="achievement-tip-card__metric">${state.hydrationGoal} ml</div>
-            <div class="achievement-tip-card__note">${state.userProfile.workoutToday ? 'Workout day boost is active right now.' : 'Turn on workout mode in Settings to raise today’s target instantly.'}</div>
+            <div class="achievement-tip-card__note">${state.userProfile.workoutToday ? 'Workout day boost is active right now.' : 'Turn on workout mode in Settings to instantly raise your target.'}</div>
           </div>
 
           <div class="tile achievement-tip-card achievement-tip-card--soft">
-            <div class="settings-section-title">Free Tier Usage</div>
-            <div class="settings-section-sub">Free users can log 5 non-water drinks per week.</div>
-            <div class="achievement-tip-card__metric">${UserData.canUseFreeDrink().limit ? `${UserData.canUseFreeDrink().remaining} left` : 'Unlimited'}</div>
-            <div class="achievement-tip-card__note">${UserData.canUseFreeDrink().limit ? `${UserData.canUseFreeDrink().used} of 5 used this week.` : 'Pro access removes weekly drink caps.'}</div>
+            <div class="settings-section-title">Account Tier</div>
+            <div class="settings-section-sub">${UserData.canUseFreeDrink().limit ? 'Free plan active.' : 'Pro features unlocked.'}</div>
+            <div class="achievement-tip-card__metric" style="${!UserData.canUseFreeDrink().limit ? 'background:linear-gradient(135deg,#f59e0b,#fbbf24);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;filter:drop-shadow(0 0 8px rgba(251,191,36,0.4));' : ''}">${UserData.canUseFreeDrink().limit ? 'Free' : '⭐ Pro'}</div>
+            <div class="achievement-tip-card__note">${UserData.canUseFreeDrink().limit ? 'Upgrade to Pro for 2× coins & unlimited drinks.' : 'Unlimited drinks • 2× coins on milestones.'}</div>
           </div>
         </section>
       </div>

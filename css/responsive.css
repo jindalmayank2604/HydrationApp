@@ -209,6 +209,47 @@ body.dark-mode .home-strip { background: #1E2128; border-color: #33383F; }
   .nav-item.active .nav-label            { color: var(--md-primary) !important; font-weight: 700 !important; }
   body.dark-mode .nav-item.active .nav-label { color: #64B5F6 !important; }
 
+  /* Hover in collapsed mode: show label as a floating tooltip to the right */
+  .nav-item:hover .nav-label {
+    position: absolute !important;
+    left: calc(var(--sidebar-col) - 8px) !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    max-width: 180px !important;
+    opacity: 1 !important;
+    pointer-events: none !important;
+    background: var(--md-surface, #fff) !important;
+    color: var(--md-on-background) !important;
+    padding: 6px 12px !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18) !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    white-space: nowrap !important;
+    z-index: 500 !important;
+    border: 1px solid var(--md-outline) !important;
+    transition: opacity 0.15s ease, transform 0.15s ease !important;
+  }
+  body.dark-mode .nav-item:hover .nav-label {
+    background: #23272F !important;
+    color: #E8EAED !important;
+    border-color: #2e3440 !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+  }
+  /* In expanded mode, hover label goes back to normal inline */
+  body.nav-expanded .nav-item:hover .nav-label {
+    position: static !important;
+    transform: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    color: var(--md-primary) !important;
+  }
+  body.nav-expanded .nav-item:hover:not(.active) .nav-label {
+    color: var(--md-primary) !important;
+  }
+
   /* EXPANDED (nav-expanded class added by JS toggle) */
   body.nav-expanded .bottom-nav      { width: var(--sidebar-width) !important; padding: 16px 10px 20px !important; }
   body.nav-expanded .bottom-nav::before { opacity:1 !important; max-height:50px !important; padding: 2px 12px 14px !important; margin-bottom:6px !important; }
