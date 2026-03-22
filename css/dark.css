@@ -216,3 +216,83 @@ body.dark-mode .md-input[type="number"] { background: #282D36; border-color: #44
 /* Toggle switch dark */
 body.dark-mode .toggle-track { background: #33383F; }
 body.dark-mode .toggle-input:checked + .toggle-track { background: #1A73E8; }
+
+/* ══════════════════════════════════════════
+   DARK MODE — Semantic token overrides
+   ══════════════════════════════════════════ */
+body.dark-mode {
+  /* ── Overlay / modal ── */
+  --theme-overlay-bg:        rgba(0,0,0,0.7);
+  --theme-modal-bg:          #1E2128;
+  --theme-modal-shadow:      0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06);
+  --theme-modal-border:      rgba(255,255,255,0.07);
+
+  /* ── Survey ── */
+  --theme-survey-overlay:    linear-gradient(160deg, #0f172a 0%, #1e3a5f 50%, #0f2027 100%);
+  --theme-survey-card:       #1E2128;
+  --theme-survey-card-shadow:0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06);
+  --theme-survey-title:      #e3e3e8;
+  --theme-survey-sub:        rgba(255,255,255,0.55);
+  --theme-survey-step:       rgba(255,255,255,0.35);
+  --theme-survey-progress-track: rgba(255,255,255,0.08);
+
+  /* ── Chip / selector ── */
+  --theme-chip-bg:           rgba(255,255,255,0.05);
+  --theme-chip-border:       rgba(255,255,255,0.12);
+  --theme-chip-text:         rgba(255,255,255,0.75);
+  --theme-chip-sel-bg:       linear-gradient(135deg, #1a73e8, #0d47a1);
+  --theme-chip-sel-text:     #ffffff;
+  --theme-chip-sel-border:   #1a73e8;
+
+  /* ── Scroll selector ── */
+  --theme-scroll-bg:         rgba(255,255,255,0.05);
+  --theme-scroll-border:     rgba(255,255,255,0.10);
+  --theme-scroll-text-dim:   rgba(255,255,255,0.28);
+  --theme-scroll-text-sel:   #ffffff;
+  --theme-scroll-overlay:    linear-gradient(to bottom, rgba(30,33,40,0.92) 0%, transparent 35%, transparent 65%, rgba(30,33,40,0.92) 100%);
+  --theme-scroll-line:       rgba(26,115,232,0.55);
+
+  /* ── Slider ── */
+  --theme-slider-track:      rgba(255,255,255,0.10);
+  --theme-slider-thumb:      linear-gradient(135deg, #1a73e8, #00C853);
+
+  /* ── Back button ── */
+  --theme-back-bg:           rgba(255,255,255,0.05);
+  --theme-back-border:       rgba(255,255,255,0.12);
+  --theme-back-text:         rgba(255,255,255,0.6);
+
+  /* ── Result card ── */
+  --theme-result-card-bg:    linear-gradient(135deg, rgba(26,115,232,0.12), rgba(0,200,83,0.08));
+  --theme-result-card-border:rgba(26,115,232,0.25);
+  --theme-result-row-bg:     rgba(255,255,255,0.04);
+  --theme-result-row-text:   rgba(255,255,255,0.6);
+  --theme-result-row-strong: #e3e3e8;
+
+  /* ── Tile/card ── */
+  --theme-tile-bg:           #1E2128;
+  --theme-tile-shadow:       0 2px 8px rgba(0,0,0,0.4);
+  --theme-tile-border:       1px solid rgba(255,255,255,0.06);
+
+  /* ── Input fields ── */
+  --theme-input-bg:          #282D36;
+  --theme-input-border:      #44495A;
+  --theme-input-text:        #E3E3E8;
+  --theme-input-focus-border:#64B5F6;
+  --theme-input-label:       #8A8F9A;
+
+  /* ── Family modal ── */
+  --theme-family-card-bg:    #1E2128;
+  --theme-family-title:      #e3e3e8;
+  --theme-family-sub:        rgba(255,255,255,0.6);
+  --theme-family-accept-bg:  linear-gradient(135deg,#1a73e8,#00C853);
+  --theme-family-cancel-bg:  rgba(255,255,255,0.05);
+  --theme-family-cancel-border: rgba(255,255,255,0.15);
+  --theme-family-cancel-text:rgba(255,255,255,0.6);
+}
+
+/* ── Light mode tile elevation (adds depth without dark bg) ── */
+.tile {
+  background: var(--theme-tile-bg);
+  box-shadow: var(--theme-tile-shadow);
+  border: var(--theme-tile-border);
+}

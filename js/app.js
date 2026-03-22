@@ -430,30 +430,32 @@ const App = (() => {
     `;
     modal.innerHTML = `
       <div id="familyJoinCard" style="
-        background:var(--md-surface,#1E2128);
+        background:var(--theme-family-card-bg);
         border-radius:24px;padding:32px 28px;
         max-width:360px;width:100%;
-        box-shadow:0 24px 64px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.07);
+        box-shadow:var(--theme-modal-shadow);
         text-align:center;
         transform:translateY(32px) scale(0.95);opacity:0;
         transition:transform 0.35s cubic-bezier(0.34,1.2,0.64,1),opacity 0.3s ease;
       ">
         <div style="font-size:52px;margin-bottom:12px;">👨‍👩‍👧</div>
-        <h2 style="font-size:20px;font-weight:800;color:var(--md-on-background,#fff);margin:0 0 10px;">Family Invite</h2>
-        <p style="font-size:14px;color:var(--md-on-surface-med,rgba(255,255,255,0.6));line-height:1.6;margin:0 0 24px;">
-          <strong style="color:var(--md-on-background,#fff);">${Utils.escapeHtml(inviterName)}</strong>
+        <h2 style="font-size:20px;font-weight:800;color:var(--theme-family-title);margin:0 0 10px;">Family Invite</h2>
+        <p style="font-size:14px;color:var(--theme-family-sub);line-height:1.6;margin:0 0 24px;">
+          <strong style="color:var(--theme-family-title);">${Utils.escapeHtml(inviterName)}</strong>
           invited you to join their hydration family network.<br>
           <span style="font-size:12px;opacity:0.7;">You'll both see each other on the Family Leaderboard.</span>
         </p>
         <div style="display:flex;gap:10px;">
           <button id="familyJoinCancel" style="
             flex:1;padding:14px;border-radius:14px;
-            border:1.5px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);
-            color:rgba(255,255,255,0.6);font-size:14px;font-weight:600;cursor:pointer;
+            border:1.5px solid var(--theme-family-cancel-border);
+            background:var(--theme-family-cancel-bg);
+            color:var(--theme-family-cancel-text);
+            font-size:14px;font-weight:600;cursor:pointer;
           ">Cancel</button>
           <button id="familyJoinAccept" style="
             flex:2;padding:14px;border-radius:14px;border:none;
-            background:linear-gradient(135deg,#1a73e8,#00C853);
+            background:var(--theme-family-accept-bg);
             color:#fff;font-size:15px;font-weight:700;cursor:pointer;
             box-shadow:0 4px 18px rgba(26,115,232,0.4);
           ">✅ Accept</button>

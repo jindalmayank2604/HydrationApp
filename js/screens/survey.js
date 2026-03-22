@@ -162,22 +162,22 @@ const SurveyScreen = (() => {
     s.textContent = `
       #surveyOverlay {
         position: fixed; inset: 0; z-index: 9000;
-        background: linear-gradient(160deg, #0f172a 0%, #1e3a5f 50%, #0f2027 100%);
+        background: var(--theme-survey-overlay);
         display: flex; align-items: center; justify-content: center;
         padding: 16px; box-sizing: border-box;
         font-family: var(--font-body, 'Google Sans', sans-serif);
       }
       .sv-card {
-        background: var(--md-surface, #1E2128);
+        background: var(--theme-survey-card);
         border-radius: 28px;
         width: 100%; max-width: 400px;
         padding: 28px 24px 32px;
-        box-shadow: 0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06);
+        box-shadow: var(--theme-survey-card-shadow);
         position: relative; overflow: hidden;
         max-height: 90vh; overflow-y: auto;
       }
       .sv-progress-wrap {
-        height: 3px; background: rgba(255,255,255,0.08);
+        height: 3px; background: var(--theme-survey-progress-track);
         border-radius: 99px; margin-bottom: 16px; overflow: hidden;
       }
       .sv-progress-bar {
@@ -185,10 +185,11 @@ const SurveyScreen = (() => {
         border-radius: 99px; transition: width 0.5s cubic-bezier(0.34,1.2,0.64,1);
       }
       .sv-step-counter {
-        font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.35);
+        font-size: 11px; font-weight: 600; color: var(--theme-survey-step);
         text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;
         min-height: 16px;
       }
+
       /* Lottie + fallback animation container */
       .sv-anim-wrap {
         display: flex; justify-content: center; margin-bottom: 20px;
@@ -197,57 +198,27 @@ const SurveyScreen = (() => {
         width: 140px; height: 140px;
         display: flex; align-items: center; justify-content: center;
         position: relative;
-        /* Smooth fade-in when Lottie loads */
         animation: sv-fadein 0.4s ease both;
       }
-      .sv-lottie-container svg {
-        border-radius: 50%;
-      }
-      .sv-anim-fallback {
-        transition: opacity 0.3s ease;
-      }
+      .sv-lottie-container svg { border-radius: 50%; }
       @keyframes sv-fadein { from { opacity:0; transform:scale(0.85); } to { opacity:1; transform:scale(1); } }
 
-      /* Micro-interaction: button tap scale */
-      .sv-chip:active, .sv-next-btn:active, .sv-back-btn:active, .sv-cta-btn:active {
-        transform: scale(0.95) !important;
-        transition: transform 0.1s ease !important;
-      }
-      .sv-chip, .sv-next-btn, .sv-back-btn, .sv-cta-btn {
-        transition: transform 0.2s cubic-bezier(0.34,1.2,0.64,1), background 0.18s ease, box-shadow 0.18s ease !important;
-      }
-
-      /* Caricature animations */
-      @keyframes sv-pulse { 0%,100%{opacity:1} 50%{opacity:0.7} }
-      @keyframes sv-bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
-      @keyframes sv-sway { 0%,100%{transform:rotate(-8deg)} 50%{transform:rotate(8deg)} }
-      @keyframes sv-blink { 0%,90%,100%{opacity:1;r:5} 95%{opacity:0;r:0} }
-      @keyframes sv-grow { 0%,100%{transform:scaleY(1)} 50%{transform:scaleY(1.05) translateY(-2px)} }
-      @keyframes sv-run { 0%,100%{transform:translateX(0)} 25%{transform:translateX(4px) rotate(3deg)} 75%{transform:translateX(-4px) rotate(-3deg)} }
-      @keyframes sv-celebrate { 0%{transform:scale(1) rotate(0)} 25%{transform:scale(1.2) rotate(-10deg)} 50%{transform:scale(1.1) rotate(10deg)} 100%{transform:scale(1) rotate(0)} }
-      .sv-caric-pulse { animation: sv-pulse 2s ease infinite; }
+      /* Ring animation */
       @keyframes sv-ring-rotate {
         from { transform: rotate(0deg); }
         to   { transform: rotate(360deg); }
       }
-      /* Key: width=height, border-radius:50%, transform-origin defaults to 50% 50% — perfect center */
       .sv-ring-spin {
         animation: sv-ring-rotate 4s linear infinite;
         transform-origin: 50% 50%;
       }
-      .sv-caric-bounce { display:inline-block; animation: sv-bounce 1.4s ease infinite; }
-      .sv-caric-sway { display:inline-block; animation: sv-sway 2s ease infinite; transform-origin:60px 60px; }
-      .sv-caric-blink { animation: sv-blink 3s ease infinite; }
-      .sv-caric-grow { animation: sv-grow 2s ease infinite; }
-      .sv-caric-run { display:inline-block; animation: sv-run 0.7s ease infinite; }
-      .sv-caric-celebrate { display:inline-block; animation: sv-celebrate 1s ease 1 0.3s both; }
 
       .sv-title {
-        font-size: 22px; font-weight: 800; color: var(--md-on-background, #fff);
+        font-size: 22px; font-weight: 800; color: var(--theme-survey-title);
         margin: 0 0 6px; line-height: 1.25; text-align: center;
       }
       .sv-sub {
-        font-size: 13px; color: rgba(255,255,255,0.55);
+        font-size: 13px; color: var(--theme-survey-sub);
         margin: 0 0 20px; text-align: center; line-height: 1.5;
       }
 
@@ -259,18 +230,19 @@ const SurveyScreen = (() => {
       .sv-chip {
         display: flex; align-items: center; gap: 6px;
         padding: 10px 16px; border-radius: 99px;
-        border: 1.5px solid rgba(255,255,255,0.12);
-        background: rgba(255,255,255,0.05);
-        color: rgba(255,255,255,0.75);
+        border: 1.5px solid var(--theme-chip-border);
+        background: var(--theme-chip-bg);
+        color: var(--theme-chip-text);
         font-size: 13px; font-weight: 600; cursor: pointer;
         transition: all 0.18s ease;
         -webkit-tap-highlight-color: transparent;
       }
       .sv-chip:active { transform: scale(0.95); }
       .sv-chip--sel {
-        background: linear-gradient(135deg, #1a73e8, #0d47a1);
-        border-color: #1a73e8; color: #fff;
-        box-shadow: 0 4px 16px rgba(26,115,232,0.4);
+        background: var(--theme-chip-sel-bg);
+        border-color: var(--theme-chip-sel-border);
+        color: var(--theme-chip-sel-text);
+        box-shadow: 0 4px 16px rgba(26,115,232,0.35);
       }
       .sv-chip-emoji { font-size: 16px; }
 
@@ -282,17 +254,19 @@ const SurveyScreen = (() => {
         -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         background-clip: text; line-height: 1; margin-bottom: 8px;
       }
-      .sv-slider-unit { font-size: 14px; color: rgba(255,255,255,0.45); margin-bottom: 16px; }
+      .sv-slider-unit {
+        font-size: 14px; color: var(--theme-survey-sub); margin-bottom: 16px;
+      }
       .sv-slider {
         width: 100%; height: 6px; border-radius: 99px;
         -webkit-appearance: none; appearance: none;
-        background: rgba(255,255,255,0.1); outline: none; cursor: pointer;
+        background: var(--theme-slider-track); outline: none; cursor: pointer;
       }
       .sv-slider::-webkit-slider-thumb {
         -webkit-appearance: none; appearance: none;
         width: 28px; height: 28px; border-radius: 50%;
         background: linear-gradient(135deg, #1a73e8, #00C853);
-        box-shadow: 0 2px 12px rgba(26,115,232,0.5);
+        box-shadow: 0 2px 12px rgba(26,115,232,0.45);
         cursor: pointer;
       }
       .sv-slider::-moz-range-thumb {
@@ -307,13 +281,16 @@ const SurveyScreen = (() => {
         margin-bottom: 24px;
       }
       .sv-height-col { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-      .sv-height-label { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 1px; }
+      .sv-height-label {
+        font-size: 11px; font-weight: 700; color: var(--theme-survey-step);
+        text-transform: uppercase; letter-spacing: 1px;
+      }
       .sv-height-scroll {
         width: 90px; height: 160px;
         overflow-y: scroll; overflow-x: hidden;
         border-radius: 16px;
-        background: rgba(255,255,255,0.05);
-        border: 1.5px solid rgba(255,255,255,0.1);
+        background: var(--theme-scroll-bg);
+        border: 1.5px solid var(--theme-scroll-border);
         scroll-snap-type: y mandatory;
         scrollbar-width: none; -ms-overflow-style: none;
         position: relative;
@@ -321,49 +298,42 @@ const SurveyScreen = (() => {
       .sv-height-scroll::-webkit-scrollbar { display: none; }
       .sv-height-item {
         height: 52px; display: flex; align-items: center; justify-content: center;
-        font-size: 20px; font-weight: 700; color: rgba(255,255,255,0.3);
+        font-size: 20px; font-weight: 700; color: var(--theme-scroll-text-dim);
         scroll-snap-align: center;
         cursor: pointer; transition: color 0.15s, font-size 0.15s;
         flex-shrink: 0;
       }
       .sv-height-item.selected {
-        color: #fff; font-size: 26px;
+        color: var(--theme-scroll-text-sel); font-size: 26px;
       }
       .sv-height-selector-overlay {
         position: absolute; inset: 0; pointer-events: none;
-        background: linear-gradient(to bottom,
-          rgba(30,33,40,0.9) 0%,
-          transparent 35%,
-          transparent 65%,
-          rgba(30,33,40,0.9) 100%);
-        border-radius: 14px;
-        z-index: 1;
+        background: var(--theme-scroll-overlay);
+        border-radius: 14px; z-index: 1;
       }
       .sv-height-center-line {
         position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
-        height: 52px; border-top: 1.5px solid rgba(26,115,232,0.5);
-        border-bottom: 1.5px solid rgba(26,115,232,0.5);
-        pointer-events: none; z-index: 2; border-radius: 0;
+        height: 52px;
+        border-top: 1.5px solid var(--theme-scroll-line);
+        border-bottom: 1.5px solid var(--theme-scroll-line);
+        pointer-events: none; z-index: 2;
       }
 
-      /* Nav */
-      .sv-nav-row {
-        display: flex; gap: 10px; align-items: center;
-      }
+      /* Nav buttons */
+      .sv-nav-row { display: flex; gap: 10px; align-items: center; }
       .sv-back-btn {
         flex: 1; padding: 13px; border-radius: 14px;
-        border: 1.5px solid rgba(255,255,255,0.12);
-        background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.6);
+        border: 1.5px solid var(--theme-back-border);
+        background: var(--theme-back-bg); color: var(--theme-back-text);
         font-size: 14px; font-weight: 600; cursor: pointer;
         transition: all 0.18s; -webkit-tap-highlight-color: transparent;
       }
       .sv-back-btn:active { transform: scale(0.97); }
       .sv-next-btn {
-        flex: 2; padding: 14px; border-radius: 14px;
-        border: none;
+        flex: 2; padding: 14px; border-radius: 14px; border: none;
         background: linear-gradient(135deg, #1a73e8, #0d47a1);
         color: #fff; font-size: 15px; font-weight: 700; cursor: pointer;
-        box-shadow: 0 4px 18px rgba(26,115,232,0.4);
+        box-shadow: 0 4px 18px rgba(26,115,232,0.35);
         transition: all 0.18s; -webkit-tap-highlight-color: transparent;
       }
       .sv-next-btn:active { transform: scale(0.97); }
@@ -371,22 +341,22 @@ const SurveyScreen = (() => {
         width: 100%; padding: 16px; border-radius: 16px; border: none;
         background: linear-gradient(135deg, #1a73e8, #00C853);
         color: #fff; font-size: 16px; font-weight: 800;
-        cursor: pointer; box-shadow: 0 6px 24px rgba(26,115,232,0.4);
+        cursor: pointer; box-shadow: 0 6px 24px rgba(26,115,232,0.35);
         transition: all 0.2s; -webkit-tap-highlight-color: transparent;
         margin-bottom: 10px;
       }
       .sv-cta-btn:active { transform: scale(0.97); }
       .sv-skip {
         display: block; width: 100%; background: none; border: none;
-        color: rgba(255,255,255,0.35); font-size: 13px;
+        color: var(--theme-survey-sub); font-size: 13px;
         cursor: pointer; padding: 8px; text-align: center;
       }
 
       /* Result card */
       .sv-result-card {
-        background: linear-gradient(135deg, rgba(26,115,232,0.12), rgba(0,200,83,0.08));
-        border: 1px solid rgba(26,115,232,0.25); border-radius: 20px;
-        padding: 20px; margin-bottom: 20px; text-align: center;
+        background: var(--theme-result-card-bg);
+        border: 1px solid var(--theme-result-card-border);
+        border-radius: 20px; padding: 20px; margin-bottom: 20px; text-align: center;
       }
       .sv-result-goal {
         font-size: 52px; font-weight: 800;
@@ -395,14 +365,37 @@ const SurveyScreen = (() => {
         background-clip: text; line-height: 1;
       }
       .sv-result-unit { font-size: 18px; font-weight: 600; }
-      .sv-result-label { font-size: 12px; color: rgba(255,255,255,0.45); margin: 6px 0 16px; }
+      .sv-result-label {
+        font-size: 12px; color: var(--theme-survey-sub); margin: 6px 0 16px;
+      }
       .sv-result-breakdown { display: flex; flex-direction: column; gap: 6px; }
       .sv-result-row {
         display: flex; justify-content: space-between;
-        font-size: 13px; color: rgba(255,255,255,0.6);
-        padding: 6px 12px; border-radius: 8px; background: rgba(255,255,255,0.04);
+        font-size: 13px; color: var(--theme-result-row-text);
+        padding: 6px 12px; border-radius: 8px;
+        background: var(--theme-result-row-bg);
       }
-      .sv-result-row strong { color: #fff; font-weight: 700; }
+      .sv-result-row strong {
+        color: var(--theme-result-row-strong); font-weight: 700;
+      }
+
+      /* Other animation keyframes (fallback) */
+      @keyframes sv-pulse  { 0%,100%{opacity:1} 50%{opacity:0.7} }
+      @keyframes sv-bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+      @keyframes sv-sway   { 0%,100%{transform:rotate(-8deg)} 50%{transform:rotate(8deg)} }
+      @keyframes sv-grow   { 0%,100%{transform:scaleY(1)} 50%{transform:scaleY(1.05) translateY(-2px)} }
+      @keyframes sv-run    { 0%,100%{transform:translateX(0)} 25%{transform:translateX(4px) rotate(3deg)} 75%{transform:translateX(-4px) rotate(-3deg)} }
+      @keyframes sv-celebrate { 0%{transform:scale(1) rotate(0)} 25%{transform:scale(1.2) rotate(-10deg)} 50%{transform:scale(1.1) rotate(10deg)} 100%{transform:scale(1) rotate(0)} }
+      .sv-caric-sway      { display:inline-block; animation: sv-sway      2s ease infinite; transform-origin: center bottom; }
+      .sv-caric-grow      { animation: sv-grow      2s ease infinite; }
+      .sv-caric-run       { display:inline-block; animation: sv-run       0.7s ease infinite; }
+      .sv-caric-celebrate { display:inline-block; animation: sv-celebrate 1s ease 1 0.3s both; }
+      .sv-caric-bounce    { display:inline-block; animation: sv-bounce    1.4s ease infinite; }
+
+      /* Micro-interactions */
+      .sv-chip, .sv-next-btn, .sv-back-btn, .sv-cta-btn {
+        transition: transform 0.15s cubic-bezier(0.34,1.2,0.64,1), background 0.18s ease, box-shadow 0.18s ease !important;
+      }
     `;
     document.head.appendChild(s);
   };
