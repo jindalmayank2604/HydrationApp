@@ -124,12 +124,18 @@ const UserData = (() => {
   }
 
   function mergeState(base, patch) {
-    return {
+    const merged = {
       ...base,
       ...patch,
       freeTierUsage: { ...(base.freeTierUsage || {}), ...((patch && patch.freeTierUsage) || {}) },
       userProfile: { ...(base.userProfile || {}), ...((patch && patch.userProfile) || {}) },
     };
+    // NEVER allow an undefined/null/empty patch to overwrite a populated array in base
+    if (!Array.isArray(merged.familyMembers) || (merged.familyMembers.length === 0 && Array.isArray(base.familyMembers) && base.familyMembers.length > 0)) {
+      merged.familyMembers = base.familyMembers || [];
+    }
+    if (!Array.isArray(merged.claimedMilestones)) merged.claimedMilestones = base.claimedMilestones || [];
+    return merged;
   }
 
   function emit() {
@@ -395,7 +401,8 @@ const UserData = (() => {
           surveyData: state.userProfile.surveyData || {},
         }, { merge: true });
       } catch (e) {
-        console.warn('[UserData] remote save failed:', e.message);
+        console.error('[UserData] remote save failed:', e.message, e.code || '');
+        throw e; // rethrow so callers (addFamilyMemberBidirectional etc.) see the real error
       }
     }
 
@@ -419,16 +426,28 @@ const UserData = (() => {
           const as = data.achievementState || {};
 
           // Merge non-profile achievement fields first
+          // IMPORTANT: only overwrite familyMembers if Firestore has a non-empty value
+          const incomingFamily = Array.isArray(as.familyMembers) && as.familyMembers.length > 0
+            ? as.familyMembers
+            : state.familyMembers; // preserve local if Firestore returns empty/undefined
+
+          console.log('[UserData] sync — local familyMembers:', state.familyMembers, '| Firestore familyMembers:', as.familyMembers, '| using:', incomingFamily);
+
           state = normalizeState(mergeState(state, {
             currentStreak:    as.currentStreak,
             lastActiveDate:   as.lastActiveDate,
             coinBalance:      as.coinBalance,
             claimedMilestones: as.claimedMilestones,
-            familyMembers:    as.familyMembers,
+            familyMembers:    incomingFamily,
             hydrationGoal:    as.hydrationGoal || data.hydrationGoal,
             monthKey:         as.monthKey,
             freeTierUsage:    as.freeTierUsage,
           }));
+
+          // Final guard: restore familyMembers if normalizeState reset it
+          if (incomingFamily.length > 0 && state.familyMembers.length === 0) {
+            state.familyMembers = incomingFamily;
+          }
 
           // Restore frames from Firestore — achievementState is primary source
           if (as.equippedFrame !== undefined) state.equippedFrame = as.equippedFrame;
@@ -603,68 +622,57 @@ const UserData = (() => {
   }
 
   async function addFamilyMemberBidirectional(inviterUid, joinerUid) {
-    /* ── COMPLETE REWRITE: robust write + verify + UI refresh ──────
-       Root problems identified:
-       1. strict myUid !== joinerUid guard threw 'Auth mismatch' if
-          Firebase.getUserId() returned a slightly different value
-          than the one passed in — error was swallowed by catch().
-       2. No read-back to confirm Firestore actually wrote.
-       3. No forced emit() to refresh UI listeners after save.
-       ─────────────────────────────────────────────────────────────── */
     if (!window.firebase || !firebase.apps?.length) throw new Error('Firebase not ready.');
     if (!inviterUid) throw new Error('Invalid inviter ID.');
 
-    // Always use the live Firebase auth UID — never trust a passed-in joinerUid
     const myUid = Firebase.getUserId();
     if (!myUid) throw new Error('Not logged in. Please sign in and try again.');
     if (inviterUid === myUid) throw new Error('You cannot join your own family.');
 
     const db = firebase.firestore();
 
-    // 1. Validate inviter exists
-    console.log('[Family] Step 1: validating inviter', inviterUid);
-    let inviterDoc;
-    try {
-      inviterDoc = await db.collection('users').doc(inviterUid).get();
-    } catch(e) {
-      throw new Error('Could not reach Firestore: ' + e.message);
-    }
-    if (!inviterDoc.exists) throw new Error('Invite link is invalid or expired.');
+    // Step 1: validate inviter exists
+    console.log('[Family] Step 1 — validating inviter:', inviterUid);
+    const inviterSnap = await db.collection('users').doc(inviterUid).get()
+      .catch(e => { throw new Error('Cannot reach Firestore: ' + e.message); });
+    if (!inviterSnap.exists) throw new Error('Invite link is invalid or expired.');
 
-    // 2. Check duplicate against CURRENT local state
-    const currentMembers = state.familyMembers || [];
-    console.log('[Family] Step 2: current familyMembers before add:', currentMembers);
-    if (currentMembers.includes(inviterUid)) {
-      console.log('[Family] Already connected — no write needed.');
-      throw new Error('Already connected with this person.');
-    }
-
-    // 3. Build new array
+    // Step 2: build new members array from current state
+    const currentMembers = Array.isArray(state.familyMembers) ? state.familyMembers : [];
+    console.log('[Family] Step 2 — current familyMembers:', currentMembers);
+    if (currentMembers.includes(inviterUid)) throw new Error('Already connected with this person.');
     const newMembers = Array.from(new Set([...currentMembers, inviterUid]));
-    console.log('[Family] Step 3: writing newMembers:', newMembers);
+    console.log('[Family] Step 3 — newMembers to write:', newMembers);
 
-    // 4. Write via save() — this hits achievementState.familyMembers (the path sync() reads)
+    // Step 3: patch state in memory FIRST (so writeLocal captures it)
+    state.familyMembers = newMembers;
+
+    // Step 4: write to localStorage immediately as safety net
+    writeLocal(state);
+    console.log('[Family] Step 4 — localStorage written');
+
+    // Step 5: write to Firestore via save()
+    // save() will mergeState then doc.set with achievementState.familyMembers
     await save({ familyMembers: newMembers });
-    console.log('[Family] Step 4: save() complete. Local state familyMembers:', state.familyMembers);
+    console.log('[Family] Step 5 — save() complete, state.familyMembers:', state.familyMembers);
 
-    // 5. Read back from Firestore to confirm write landed
+    // Step 6: read back from Firestore to confirm
     try {
       const written = await db.collection('users').doc(myUid).get();
-      const writtenMembers = written.data()?.achievementState?.familyMembers || [];
-      console.log('[Family] Step 5: Firestore read-back familyMembers:', writtenMembers);
-      if (!writtenMembers.includes(inviterUid)) {
-        console.warn('[Family] WARNING: inviterUid not found in Firestore after write — rules may have blocked it silently.');
+      const firestoreFamily = written.data()?.achievementState?.familyMembers || [];
+      console.log('[Family] Step 6 — Firestore read-back:', firestoreFamily);
+      if (!firestoreFamily.includes(inviterUid)) {
+        console.error('[Family] WRITE DID NOT LAND — rules may have blocked it. Check Firebase console.');
       }
     } catch(e) {
-      console.warn('[Family] Step 5: read-back failed (non-fatal):', e.message);
+      console.warn('[Family] Step 6 read-back failed (non-fatal):', e.message);
     }
 
-    // 6. Force UI refresh — emit() notifies all UserData subscribers (settings count, leaderboard)
+    // Step 7: force UI refresh
     _famLbCacheInvalidate();
     _reverseFamilyCache = { uids: [], ts: 0 };
     emit();
-    console.log('[Family] Step 6: emit() fired, UI should refresh.');
-
+    console.log('[Family] Step 7 — emit() fired, final state.familyMembers:', state.familyMembers);
     return state.familyMembers;
   }
 

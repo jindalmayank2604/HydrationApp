@@ -367,10 +367,14 @@ const App = (() => {
     // Update weather in header after login (geolocation may now be permitted)
     _updateHeaderDate();
 
-    // Handle pending family join (from invite link before login)
+    // Handle pending family join (from invite link opened before login)
     const pendingJoin = localStorage.getItem('wt_pending_family_join');
-    if (pendingJoin) { localStorage.removeItem('wt_pending_family_join'); _handleFamilyInvite(); }
-    _handleFamilyInvite();
+    if (pendingJoin) {
+      localStorage.removeItem('wt_pending_family_join');
+      _handleFamilyInvite(pendingJoin); // pass UID directly — URL is already clean
+    } else {
+      _handleFamilyInvite(); // normal path — reads from URL params
+    }
 
     // Weather-based smart goal popup (non-blocking, only before noon, once per day)
     if (window.WeatherGoal) WeatherGoal.tryShow().catch(() => {});
@@ -382,12 +386,17 @@ const App = (() => {
   };
 
   /* ── Handle family invite links (?joinFamily=ownerUid) ── */
-  const _handleFamilyInvite = async () => {
+  const _handleFamilyInvite = async (pendingUid = null) => {
+    // pendingUid is passed when called from the post-login pending-join path
+    // (URL is already cleaned by then, so we can't read from params)
     const params = new URLSearchParams(window.location.search);
-    const inviterUid = params.get('joinFamily');
+    const inviterUid = pendingUid || params.get('joinFamily');
     if (!inviterUid) return;
-    // Clean URL immediately
-    window.history.replaceState({}, '', window.location.pathname);
+
+    // Clean URL if it still has the param
+    if (params.get('joinFamily')) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
 
     const session = Auth.getSession();
     if (!session) {
