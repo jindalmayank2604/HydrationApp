@@ -184,19 +184,17 @@ service cloud.firestore {
 
     match /users/{uid} {
       allow read:   if isAuthed();
-      // Full write: own doc only
+      // Own doc: full validated write
       allow write:  if isOwner(uid) && validUserDoc(request.resource.data);
-      // Mutual family add: any auth user may arrayUnion one UID into
-      // achievementState.familyMembers — no other field may change.
+      // Mutual family add: any authenticated user can arrayUnion their own UID
+      // into another user's achievementState.familyMembers — nothing else changes.
       allow update: if isAuthed()
-                    && resource != null
-                    && request.resource.data.diff(resource.data)
-                         .affectedKeys().hasOnly(['achievementState'])
-                    && request.resource.data.achievementState
-                         .diff(resource.data.achievementState)
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['achievementState'])
+                    && request.resource.data.achievementState.diff(resource.data.achievementState)
                          .affectedKeys().hasOnly(['familyMembers'])
-                    && request.resource.data.achievementState.familyMembers
-                         .hasAll(resource.data.achievementState.familyMembers)
+                    && request.resource.data.achievementState.familyMembers.hasAll(
+                         resource.data.achievementState.familyMembers)
                     && request.resource.data.achievementState.familyMembers.size()
                          == resource.data.achievementState.familyMembers.size() + 1;
     }

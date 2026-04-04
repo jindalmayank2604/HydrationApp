@@ -23,7 +23,7 @@ const AnalyticsScreen = (() => {
     if (window.UserData) {
       _udUnsub = UserData.subscribe((newState) => {
         if (Router.getCurrent() === 'analytics') {
-          const tile = Utils.el('familyLeaderboardTile');
+          const tile = Utils.el('familyHydrationTile');
           if (tile) renderFamilyLeaderboard();
         }
       });
@@ -56,8 +56,8 @@ const AnalyticsScreen = (() => {
           <div class="an-loading">⏳ Loading leaderboard…</div>
         </div>
 
-        <div class="tile" id="familyLeaderboardTile">
-          <div class="an-loading">⏳ Loading family leaderboard…</div>
+        <div class="tile" id="familyHydrationTile">
+          <div class="an-loading">⏳ Loading family…</div>
         </div>
 
         <!-- Monthly Report (Pro) -->
@@ -562,106 +562,183 @@ const AnalyticsScreen = (() => {
   };
 
   const renderFamilyLeaderboard = async () => {
-    const tile = Utils.el('familyLeaderboardTile');
+    const tile = Utils.el('familyHydrationTile');
     if (!tile || !window.UserData) return;
-    const state = UserData.getState();
-    const myUid = window.Firebase ? Firebase.getUserId() : null;
-    const memberUids = state.familyMembers || [];
-    const baseUrl = window.location.origin + window.location.pathname;
-    const inviteLink = myUid ? `${baseUrl}?joinFamily=${myUid}` : null;
+
+    const state    = UserData.getState();
+    const myUid    = window.Firebase ? Firebase.getUserId() : null;
+    const members  = state.familyMembers || [];
+
+    // Inject CSS once
+    if (!document.getElementById('famCircleCSS')) {
+      const s = document.createElement('style');
+      s.id = 'famCircleCSS';
+      s.textContent = `
+        .fam-circles-wrap {
+          display: flex;
+          gap: 16px;
+          overflow-x: auto;
+          padding: 4px 2px 12px;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+          -webkit-overflow-scrolling: touch;
+        }
+        .fam-circles-wrap::-webkit-scrollbar { display: none; }
+        .fam-circle-item {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 8px;
+          flex-shrink: 0;
+          cursor: default;
+        }
+        .fam-circle-svg { display: block; }
+        .fam-circle-name {
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--md-on-surface-med);
+          text-align: center;
+          max-width: 72px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .fam-circle-streak {
+          font-size: 10px;
+          color: var(--md-on-surface-low);
+          text-align: center;
+        }
+        .fam-empty {
+          text-align: center;
+          padding: 24px 0;
+          color: var(--md-on-surface-med);
+          font-size: 13px;
+        }
+        @keyframes fam-fill {
+          from { stroke-dashoffset: 220; }
+        }
+      `;
+      document.head.appendChild(s);
+    }
 
     tile.innerHTML = `
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
         <div>
-          <div style="font-size:15px;font-weight:700;color:var(--md-on-background);">👨‍👩‍👧‍👦 Family Leaderboard</div>
-          <div style="font-size:12px;color:var(--md-on-surface-med);margin-top:2px;">Your personal network — ranked by streak, goal & completion.</div>
+          <div style="font-size:15px;font-weight:700;color:var(--md-on-background);">
+            \u{1F46A} Family Hydration
+          </div>
+          <div style="font-size:11px;color:var(--md-on-surface-med);margin-top:2px;">
+            Today's progress across your network
+          </div>
         </div>
-        ${inviteLink ? `<button id="familyCopyInvite" class="family-add-btn" style="white-space:nowrap;flex-shrink:0;">🔗 Invite</button>` : ''}
+        <button id="famInviteBtn" class="md-btn" style="font-size:12px;padding:6px 12px;">
+          \u{1F517} Invite
+        </button>
       </div>
-
-      ${memberUids.length > 0 ? `
-      <div id="familyRoster" class="family-roster" style="margin-bottom:10px;">
-        ${memberUids.map(uid => `<span class="family-roster__chip" style="font-size:11px;cursor:default;">👤 <span class="fam-name-${uid}">${uid.slice(0,8)}…</span></span>`).join('')}
-      </div>` : ''}
-
-      <div id="familyRows" style="display:flex;flex-direction:column;gap:8px;margin-top:4px;">
-        <div class="an-loading" style="padding:12px 0;text-align:center;font-size:13px;color:var(--md-on-surface-med);">⏳ Loading…</div>
+      <div id="famCirclesWrap" class="fam-circles-wrap">
+        <div class="fam-empty">\u23f3 Loading…</div>
       </div>
     `;
 
-    // Copy invite link
-    tile.querySelector('#familyCopyInvite')?.addEventListener('click', () => {
-      if (!inviteLink) return;
-      navigator.clipboard.writeText(inviteLink)
-        .then(() => Utils.showToast('✅ Invite link copied!'))
-        .catch(() => {
-          const el = document.createElement('textarea');
-          el.value = inviteLink; document.body.appendChild(el);
-          el.select(); document.execCommand('copy'); el.remove();
-          Utils.showToast('✅ Invite link copied!');
-        });
+    // Invite button
+    tile.querySelector('#famInviteBtn')?.addEventListener('click', async () => {
+      try {
+        const link = await UserData.createFamilyInviteLink();
+        navigator.clipboard.writeText(link)
+          .then(() => Utils.showToast('\u2705 Invite link copied!'))
+          .catch(() => Utils.showToast(link));
+      } catch(e) { Utils.showToast('\u274C ' + e.message); }
     });
 
-    // Resolve member names asynchronously
-    if (memberUids.length > 0 && window.firebase) {
-      memberUids.forEach(async (uid) => {
-        try {
-          const doc = await firebase.firestore().collection('users').doc(uid).get();
-          const name = doc.exists
-            ? (doc.data()?.displayName || doc.data()?.email?.split('@')[0] || uid.slice(0,8))
-            : uid.slice(0,8);
-          tile.querySelectorAll(`.fam-name-${uid}`).forEach(el => { el.textContent = name; });
-        } catch(e) {}
-      });
+    const wrap = tile.querySelector('#famCirclesWrap');
+    if (!wrap) return;
+
+    if (!members.length) {
+      wrap.innerHTML = `
+        <div class="fam-empty">
+          \u{1F465} No family members yet.<br>
+          <span style="font-size:11px;">Tap Invite to share your link!</span>
+        </div>`;
+      return;
     }
 
-    const rowsEl = tile.querySelector('#familyRows');
-    const renderRows = (rows) => {
-      if (!rowsEl) return;
-      if (!rows.length) {
-        rowsEl.innerHTML = `
-          <div style="text-align:center;padding:20px 0;">
-            <div style="font-size:32px;margin-bottom:8px;">👥</div>
-            <div style="font-size:13px;color:var(--md-on-surface-med);">No family members yet.</div>
-            ${inviteLink ? `<div style="font-size:12px;color:var(--md-on-surface-med);margin-top:4px;">Share your invite link to get started!</div>` : ''}
-          </div>`;
-        return;
-      }
+    // Fetch data
+    let rows = [];
+    try {
+      rows = await UserData.fetchFamilyHydration();
+    } catch(e) {
+      wrap.innerHTML = '<div class="fam-empty">Could not load family data.</div>';
+      return;
+    }
 
-      rowsEl.innerHTML = rows.map((row) => {
-        const isMe = row.uid === myUid;
-        const streak = row.dailyStreak || 0;
-        const goalPct = row.goal ? Math.round(((row.waterIntakeToday || 0) / row.goal) * 100) : 0;
-        const medal = row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : row.rank === 3 ? '🥉' : row.rank;
-        const avatar = (window.Frames && row.equippedFrame)
-          ? Frames.avatarWithFrame(row.photoURL || null, row.displayName || '?', 38, row.equippedFrame)
-          : (window.Profile
-            ? Profile.avatarHTML(row.photoURL || null, row.displayName || '?', 38)
-            : `<div style="width:38px;height:38px;border-radius:50%;background:var(--md-primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex-shrink:0;">${(row.displayName||'?').charAt(0).toUpperCase()}</div>`);
+    // Render circles
+    const R = 34, CIRC = 2 * Math.PI * R; // circumference ≈ 213.6
+    const SIZE = 80;
+    const CENTER = SIZE / 2;
 
-        return `
-          <div class="lb-row${isMe ? ' lb-row--me' : ''}">
-            <div class="lb-medal${row.rank > 3 ? ' lb-medal--num' : ''}">${medal}</div>
-            ${avatar}
-            <div class="lb-info">
-              <div class="lb-name">${Utils.escapeHtml(row.displayName || 'Member')}${isMe ? ' <span style="opacity:0.55;font-size:10px;">(you)</span>' : ''}</div>
-              <div class="lb-sub">Goal: ${row.goal || '—'} ml · Today: ${goalPct}%</div>
-            </div>
-            <div class="lb-streak">
-              <div class="lb-streak-num${streak === 0 ? ' lb-streak-num--zero' : ''}">${streak}</div>
-              <div class="lb-streak-icon">🔥</div>
-            </div>
-          </div>`;
-      }).join('');
-    };
+    wrap.innerHTML = rows.map(row => {
+      const pct       = Math.max(0, Math.min(100, row.pct || 0));
+      const filled    = CIRC * (pct / 100);
+      const empty     = CIRC - filled;
+      const isMe      = row.isMe;
 
-    // Initial load
-    const initialRows = await UserData.fetchFamilyLeaderboard();
-    renderRows(initialRows);
+      // Color by %
+      const color = pct >= 100 ? '#00C853'
+                  : pct >= 60  ? '#1A73E8'
+                  : pct >= 30  ? '#FBBC04'
+                  : '#EA4335';
 
-    // Subscribe to real-time updates (single own-doc listener + debounced refresh)
-    if (UserData.subscribeToFamilyLeaderboard) {
-      _activeFamilyUnsub = UserData.subscribeToFamilyLeaderboard(renderRows);
+      const trackColor = isMe ? 'rgba(26,115,232,0.12)' : 'rgba(0,0,0,0.07)';
+
+      return `
+        <div class="fam-circle-item">
+          <svg class="fam-circle-svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
+            <!-- Track -->
+            <circle
+              cx="${CENTER}" cy="${CENTER}" r="${R}"
+              fill="none" stroke="${trackColor}" stroke-width="6"/>
+            <!-- Fill — animated -->
+            <circle
+              cx="${CENTER}" cy="${CENTER}" r="${R}"
+              fill="none"
+              stroke="${color}"
+              stroke-width="6"
+              stroke-linecap="round"
+              stroke-dasharray="${filled} ${empty}"
+              stroke-dashoffset="${CIRC * 0.25}"
+              style="transform-origin:${CENTER}px ${CENTER}px;transform:rotate(-90deg);
+                     animation:fam-fill 0.8s ease-out both;"/>
+            <!-- Percentage text -->
+            <text x="${CENTER}" y="${CENTER + 1}"
+              text-anchor="middle" dominant-baseline="middle"
+              font-family="Google Sans,sans-serif"
+              font-size="13" font-weight="800"
+              fill="${color}">${pct}%</text>
+            ${isMe ? `<circle cx="${SIZE-8}" cy="8" r="5" fill="#1A73E8" opacity="0.9"/>` : ''}
+          </svg>
+          <div class="fam-circle-name" title="${Utils.escapeHtml(row.name)}">
+            ${Utils.escapeHtml(row.name)}${isMe ? ' \u2605' : ''}
+          </div>
+          <div class="fam-circle-streak">
+            \u{1F525} ${row.streak || 0} days
+          </div>
+        </div>`;
+    }).join('');
+
+    // Subscribe for live updates (own leaderboard doc change)
+    if (UserData.subscribeToFamilyLeaderboard && !tile._famUnsub) {
+      tile._famUnsub = UserData.subscribeToFamilyLeaderboard(async () => {
+        const fresh = await UserData.fetchFamilyHydration().catch(() => null);
+        if (fresh) {
+          // Re-render just the circles wrap, not the whole tile
+          const w = tile.querySelector('#famCirclesWrap');
+          if (w) {
+            // Simple re-call
+            renderFamilyLeaderboard();
+            tile._famUnsub = null; // prevent double-subscribe on re-render
+          }
+        }
+      });
     }
   };
 

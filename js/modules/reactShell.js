@@ -92,11 +92,6 @@ const ReactShell = (() => {
     const [darkMode, setDarkMode] = React.useState(
       document.body.classList.contains('dark-mode')
     );
-    const [installState, setInstallState] = React.useState({
-      visible: false,
-      deferredPrompt: null,
-    });
-
     React.useEffect(() => {
       if (!window.Router?.subscribe) return undefined;
       return window.Router.subscribe((screen) => {
@@ -123,27 +118,9 @@ const ReactShell = (() => {
       return () => document.removeEventListener('keydown', onKeyDown);
     }, []);
 
-    React.useEffect(() => {
-      const onBeforeInstallPrompt = (event) => {
-        event.preventDefault();
-        setInstallState({
-          visible: true,
-          deferredPrompt: event,
-        });
-      };
-      window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt);
-      return () => window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt);
-    }, []);
-
     const navigate = (screen) => {
       window.Router?.navigate?.(screen);
       if (navigator.vibrate) navigator.vibrate(8);
-    };
-
-    const installApp = async () => {
-      if (!installState.deferredPrompt) return;
-      await installState.deferredPrompt.prompt();
-      setInstallState({ visible: false, deferredPrompt: null });
     };
 
     return h(
@@ -356,104 +333,7 @@ const ReactShell = (() => {
           ),
         ]
       ),
-      h('div', { className: 'toast', id: 'toast', role: 'alert', 'aria-live': 'polite' }),
-      installState.visible
-        ? h(
-            'div',
-            {
-              id: 'installBanner',
-              style: {
-                display: 'flex',
-                position: 'fixed',
-                bottom: '80px',
-                left: '16px',
-                right: '16px',
-                background: '#fff',
-                borderRadius: '20px',
-                padding: '16px 20px',
-                boxShadow: '0 4px 24px rgba(0,0,0,0.15)',
-                zIndex: '300',
-                alignItems: 'center',
-                gap: '12px',
-              },
-            },
-            [
-              h('img', {
-                key: 'icon',
-                src: 'assets/icon-192.png',
-                width: 40,
-                height: 40,
-                style: { borderRadius: '10px' },
-              }),
-              h(
-                'div',
-                { key: 'text', style: { flex: 1 } },
-                [
-                  h(
-                    'div',
-                    {
-                      key: 'title',
-                      style: {
-                        fontWeight: 700,
-                        fontSize: '14px',
-                        fontFamily: 'Google Sans, sans-serif',
-                      },
-                    },
-                    'Install Water Tracker'
-                  ),
-                  h(
-                    'div',
-                    {
-                      key: 'sub',
-                      style: {
-                        fontSize: '12px',
-                        color: '#5F6368',
-                        marginTop: '2px',
-                      },
-                    },
-                    'Add to home screen for quick access'
-                  ),
-                ]
-              ),
-              h(
-                'button',
-                {
-                  key: 'install',
-                  id: 'installBtn',
-                  onClick: installApp,
-                  style: {
-                    background: '#1A73E8',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '99px',
-                    padding: '8px 16px',
-                    fontWeight: 700,
-                    fontSize: '13px',
-                    cursor: 'pointer',
-                  },
-                },
-                'Install'
-              ),
-              h(
-                'button',
-                {
-                  key: 'dismiss',
-                  id: 'dismissBanner',
-                  onClick: () => setInstallState({ visible: false, deferredPrompt: null }),
-                  style: {
-                    background: 'none',
-                    border: 'none',
-                    fontSize: '20px',
-                    cursor: 'pointer',
-                    color: '#5F6368',
-                    padding: '0 4px',
-                  },
-                },
-                '\u2715'
-              ),
-            ]
-          )
-        : null
+      h('div', { className: 'toast', id: 'toast', role: 'alert', 'aria-live': 'polite' })
     );
   }
 

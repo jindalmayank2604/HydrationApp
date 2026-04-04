@@ -261,8 +261,12 @@ body.dark-mode .home-strip { background: #1E2128; border-color: #33383F; }
   body.nav-expanded .desktop-nav-toggle span:nth-child(3) { transform:translateY(-6px) rotate(-45deg) !important; width:14px !important; }
 
 
-  /* Hover on nav item: show tooltip label when collapsed */
-  .bottom-nav:not(.nav-expanded-sidebar) .nav-item:hover .nav-label { max-width: 0 !important; }
+  /* Keep hover labels visible in collapsed desktop mode */
+  .bottom-nav:not(.nav-expanded-sidebar) .nav-item:hover .nav-label {
+    max-width: 180px !important;
+    opacity: 1 !important;
+    text-shadow: 0 0 12px rgba(26,115,232,0.28) !important;
+  }
 
   /* Individual item hover tooltip when sidebar is collapsed */
   .nav-item:hover::after {
@@ -285,6 +289,9 @@ body.dark-mode .home-strip { background: #1E2128; border-color: #33383F; }
     background: #1E2128 !important;
     border-color: #33383F !important;
     box-shadow: 0 4px 14px rgba(0,0,0,0.4) !important;
+  }
+  body.dark-mode .bottom-nav:not(.nav-expanded-sidebar) .nav-item:hover .nav-label {
+    text-shadow: 0 0 14px rgba(100,181,246,0.42) !important;
   }
 
   /* ── CONTENT COLUMN ──

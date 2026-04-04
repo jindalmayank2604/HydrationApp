@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -24,25 +24,25 @@
   <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Google+Sans+Display:wght@400;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/tokens.css" />
   <link rel="stylesheet" href="css/base.css" />
-  <link rel="stylesheet" href="css/components.css?v=1774238575" />
-  <link rel="stylesheet" href="css/screens.css?v=1774238575" />
+  <link rel="stylesheet" href="css/components.css?v=1774957250" />
+  <link rel="stylesheet" href="css/screens.css?v=1774957250" />
   <link rel="stylesheet" href="css/login.css" />
   <link rel="stylesheet" href="css/dark.css" />
   <link rel="stylesheet" href="css/theme.css" />
   <link rel="stylesheet" href="css/responsive.css" />
-  <link rel="stylesheet" href="css/custom-inputs.css?v=1774238575">
-  <link rel="stylesheet" href="css/orbit-nav.css?v=1774238575">
-  <link rel="stylesheet" href="css/achievement-animations.css?v=1774238575">
+  <link rel="stylesheet" href="css/custom-inputs.css?v=1774957250">
+  <link rel="stylesheet" href="css/orbit-nav.css?v=1774957250">
+  <link rel="stylesheet" href="css/achievement-animations.css?v=1774957250">
   <link rel="stylesheet" href="css/animations.css" />
   <script>
-    // Force scroll to top immediately on load — before any content renders
+    // Force scroll to top immediately on load â€” before any content renders
     if (history.scrollRestoration) history.scrollRestoration = 'manual';
     window.addEventListener('load', function() { window.scrollTo(0, 0); });
     document.addEventListener('DOMContentLoaded', function() { window.scrollTo(0, 0); });
   </script>
 </head>
 <body>
-  <!-- ── BOTTOM NAV ── -->
+  <!-- â”€â”€ BOTTOM NAV â”€â”€ -->
   <nav class="bottom-nav" role="navigation">
     <button class="desktop-nav-toggle" id="desktopNavToggle" aria-label="Collapse sidebar" title="Collapse sidebar">
       <span></span><span></span><span></span>
@@ -95,7 +95,7 @@
   </nav>
 
 
-  <!-- ── MOBILE ORBIT NAV ── -->
+  <!-- â”€â”€ MOBILE ORBIT NAV â”€â”€ -->
   <div id="mobileOrbitNav" aria-label="Navigation menu">
     <button class="mobile-orbit-trigger" id="orbitTrigger" aria-label="Open navigation">
       <span class="orbit-trigger-icon orbit-trigger-icon--open">
@@ -141,14 +141,14 @@
       </button>
     </div>
   </div>
-  <!-- ── ORBIT BACKDROP ── -->
+  <!-- â”€â”€ ORBIT BACKDROP â”€â”€ -->
   <div id="orbitBackdrop" class="orbit-backdrop"></div>
   <div class="content-col">
 
-  <!-- ── HEADER ── -->
+  <!-- â”€â”€ HEADER â”€â”€ -->
   <header class="app-header" id="appHeader">
     <div class="header-left">
-      <div id="headerAvatar" class="header-avatar" style="overflow:visible;border-radius:50%;position:relative;">💧</div>
+      <div id="headerAvatar" class="header-avatar" style="overflow:visible;border-radius:50%;position:relative;">ðŸ’§</div>
       <div class="header-text">
         <div class="header-greeting" id="greeting">Water Tracker</div>
         <div class="header-date" id="headerDate"></div>
@@ -161,11 +161,11 @@
       </div>
       <button id="darkModeToggle" aria-label="Toggle dark mode"
         style="background:none;border:none;cursor:pointer;font-size:22px;padding:6px;border-radius:50%;transition:background 150ms;"
-        title="Toggle dark/light mode">🌙</button>
+        title="Toggle dark/light mode">ðŸŒ™</button>
     </div>
   </header>
 
-  <!-- ── MAIN CONTENT ── -->
+  <!-- â”€â”€ MAIN CONTENT â”€â”€ -->
   <main class="app-main">
     <section class="screen active" id="screen-home">
       <div id="home-root"></div>
@@ -195,10 +195,10 @@
   </div><!-- /.content-col -->
 
 
-  <!-- ── TOAST ── -->
+  <!-- â”€â”€ TOAST â”€â”€ -->
   <div class="toast" id="toast" role="alert" aria-live="polite"></div>
 
-  <!-- Show login overlay IMMEDIATELY — skip if rememberMe session valid -->
+  <!-- Show login overlay IMMEDIATELY â€” skip if rememberMe session valid -->
   <script>
     (function() {
       // Check if valid rememberMe session exists
@@ -211,22 +211,22 @@
         } catch { return false; }
       })();
 
-      // Survey not done yet → let survey.js show first, no spinner needed
+      // Survey not done yet â†’ let survey.js show first, no spinner needed
       const surveyDone = localStorage.getItem('wt_survey_done') === 'true';
 
       if (!hasRememberMe && surveyDone) {
-        // Returning user who did survey — show login spinner while JS loads
+        // Returning user who did survey â€” show login spinner while JS loads
         const overlay = document.createElement('div');
         overlay.id = 'loginOverlay';
         overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,#E8F0FE,#D2E3FC 50%,#C5E1F5);display:flex;align-items:center;justify-content:center;padding:16px;';
-        overlay.innerHTML = '<div style="background:#fff;border-radius:28px;padding:32px 24px;width:100%;max-width:380px;box-shadow:0 8px 40px rgba(26,115,232,.18);text-align:center;"><div style="font-size:52px;">💧</div><div style="font-family:Google Sans,sans-serif;font-size:22px;font-weight:700;color:#202124;margin:8px 0 4px;">Water Tracker</div><div style="font-size:13px;color:#5F6368;margin-bottom:20px;">Signing you in...</div><div style="width:40px;height:40px;border:4px solid #D2E3FC;border-top-color:#1A73E8;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto;"></div></div>';
+        overlay.innerHTML = '<div style="background:#fff;border-radius:28px;padding:32px 24px;width:100%;max-width:380px;box-shadow:0 8px 40px rgba(26,115,232,.18);text-align:center;"><div style="font-size:52px;">ðŸ’§</div><div style="font-family:Google Sans,sans-serif;font-size:22px;font-weight:700;color:#202124;margin:8px 0 4px;">Water Tracker</div><div style="font-size:13px;color:#5F6368;margin-bottom:20px;">Signing you in...</div><div style="width:40px;height:40px;border:4px solid #D2E3FC;border-top-color:#1A73E8;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto;"></div></div>';
         document.body.appendChild(overlay);
       }
-      // If surveyDone is false → no spinner, survey.js will show its own overlay
+      // If surveyDone is false â†’ no spinner, survey.js will show its own overlay
     })();
   </script>
 
-  <!-- ── SCRIPTS (order matters) ── -->
+  <!-- â”€â”€ SCRIPTS (order matters) â”€â”€ -->
   <!-- hCaptcha (loaded before app) -->
   <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
 
@@ -240,36 +240,36 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="js/modules/firebase.js?v=1774238575"></script>
-  <script src="js/modules/storage.js?v=1774238575"></script>
-  <script src="js/modules/utils.js?v=1774238575"></script>
-  <script src="js/modules/animations.js?v=1774238575"></script>
-  <script src="js/modules/userData.js?v=1774238575"></script>
-  <script src="js/modules/notifications.js?v=1774238575"></script>
-  <script src="js/modules/router.js?v=1774238575"></script>
-  <script src="js/modules/auth.js?v=1774238575"></script>
-  <script src="js/screens/login.js?v=1774238575"></script>
-  <script src="js/modules/signup.js?v=1774238575"></script>
-  <script src="js/modules/weather.js?v=1774238575"></script>
-  <script src="js/modules/profile.js?v=1774238575"></script>
-  <script src="js/modules/leaderboard.js?v=1774238575"></script>
-  <script src="js/screens/survey.js?v=1774238575"></script>
-  <script src="js/screens/aiscan.js?v=1774238575"></script>
-  <script src="js/modules/drinks.js?v=1774238575"></script>
-  <script src="js/screens/home.js?v=1774238575"></script>
-  <script src="js/screens/history.js?v=1774238575"></script>
-  <script src="js/screens/analytics.js?v=1774238575"></script>
-  <script src="js/screens/achievements.js?v=1774238575"></script>
-  <script src="js/screens/reminder.js?v=1774238575"></script>
-  <script src="js/modules/tokenManager.js?v=1774238575"></script>
-  <script src="js/modules/dataExport.js?v=1774238575"></script>
-  <script src="js/modules/weatherGoal.js?v=1774238575"></script>
-  <script src="js/screens/settings.js?v=1774238575"></script>
-  <script src="js/modules/frames.js?v=1774238575"></script>
-  <script src="js/screens/shop.js?v=1774238575"></script>
-  <script src="js/modules/orbitNav.js?v=1774238575"></script>
-  <script src="js/modules/stepTracker.js?v=1774238575"></script>
-  <script src="js/app.js?v=1774238575"></script>
+  <script src="js/modules/firebase.js?v=1774957250"></script>
+  <script src="js/modules/storage.js?v=1774957250"></script>
+  <script src="js/modules/utils.js?v=1774957250"></script>
+  <script src="js/modules/animations.js?v=1774957250"></script>
+  <script src="js/modules/userData.js?v=1774957250"></script>
+  <script src="js/modules/notifications.js?v=1774957250"></script>
+  <script src="js/modules/router.js?v=1774957250"></script>
+  <script src="js/modules/auth.js?v=1774957250"></script>
+  <script src="js/screens/login.js?v=1774957250"></script>
+  <script src="js/modules/signup.js?v=1774957250"></script>
+  <script src="js/modules/weather.js?v=1774957250"></script>
+  <script src="js/modules/profile.js?v=1774957250"></script>
+  <script src="js/modules/leaderboard.js?v=1774957250"></script>
+  <script src="js/screens/survey.js?v=1774957250"></script>
+  <script src="js/screens/aiscan.js?v=1774957250"></script>
+  <script src="js/modules/drinks.js?v=1774957250"></script>
+  <script src="js/screens/home.js?v=1774957250"></script>
+  <script src="js/screens/history.js?v=1774957250"></script>
+  <script src="js/screens/analytics.js?v=1774957250"></script>
+  <script src="js/screens/achievements.js?v=1774957250"></script>
+  <script src="js/screens/reminder.js?v=1774957250"></script>
+  <script src="js/modules/tokenManager.js?v=1774957250"></script>
+  <script src="js/modules/dataExport.js?v=1774957250"></script>
+  <script src="js/modules/weatherGoal.js?v=1774957250"></script>
+  <script src="js/screens/settings.js?v=1774957250"></script>
+  <script src="js/modules/frames.js?v=1774957250"></script>
+  <script src="js/screens/shop.js?v=1774957250"></script>
+  <script src="js/modules/orbitNav.js?v=1774957250"></script>
+  <script src="js/modules/stepTracker.js?v=1774957250"></script>
+  <script src="js/app.js?v=1774957250"></script>
 
   <!-- Dark Mode Script -->
   <script>
@@ -300,31 +300,6 @@
         await navigator.serviceWorker.register('./sw.js');
       } catch(e) {}
     })();
-  </script>
-
-  <!-- Install banner -->
-  <div id="installBanner" style="display:none;position:fixed;bottom:80px;left:16px;right:16px;background:#fff;border-radius:20px;padding:16px 20px;box-shadow:0 4px 24px rgba(0,0,0,0.15);z-index:300;align-items:center;gap:12px;">
-    <img src="assets/icon-192.png" width="40" height="40" style="border-radius:10px;" />
-    <div style="flex:1;">
-      <div style="font-weight:700;font-size:14px;font-family:'Google Sans',sans-serif;">Install Water Tracker</div>
-      <div style="font-size:12px;color:#5F6368;margin-top:2px;">Add to home screen for quick access</div>
-    </div>
-    <button id="installBtn" style="background:#1A73E8;color:#fff;border:none;border-radius:99px;padding:8px 16px;font-weight:700;font-size:13px;cursor:pointer;">Install</button>
-    <button id="dismissBanner" style="background:none;border:none;font-size:20px;cursor:pointer;color:#5F6368;padding:0 4px;">✕</button>
-  </div>
-  <script>
-    let deferredPrompt;
-    const banner = document.getElementById('installBanner');
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault(); deferredPrompt = e; banner.style.display = 'flex';
-    });
-    document.getElementById('installBtn')?.addEventListener('click', async () => {
-      banner.style.display = 'none';
-      if (deferredPrompt) { deferredPrompt.prompt(); deferredPrompt = null; }
-    });
-    document.getElementById('dismissBanner')?.addEventListener('click', () => {
-      banner.style.display = 'none';
-    });
-  </script>
-</body>
+  </script></body>
 </html>
+

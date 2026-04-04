@@ -32,7 +32,7 @@ self.addEventListener('message', e => {
     self._bgTimer = setInterval(() => {
       self.registration.showNotification('Water Tracker 💧', {
         body: msgs[Math.floor(Math.random()*msgs.length)],
-        icon: '/HydrationApp/assets/icon-192.png',
+        icon: './assets/icon-192.png',
         tag: 'water-reminder', renotify: true, vibrate: [200,100,200],
       });
     }, intervalMinutes * 60 * 1000);
@@ -44,5 +44,5 @@ self.addEventListener('message', e => {
 
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  e.waitUntil(clients.openWindow('/HydrationApp/'));
+  e.waitUntil(clients.openWindow('./'));
 });

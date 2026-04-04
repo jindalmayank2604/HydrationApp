@@ -367,14 +367,77 @@ const App = (() => {
     // Update weather in header after login (geolocation may now be permitted)
     _updateHeaderDate();
 
-    // Handle pending family join (from invite link opened before login)
-    const pendingJoin = localStorage.getItem('wt_pending_family_join');
-    if (pendingJoin) {
-      localStorage.removeItem('wt_pending_family_join');
-      _handleFamilyInvite(pendingJoin); // pass UID directly — URL is already clean
-    } else {
-      _handleFamilyInvite(); // normal path — reads from URL params
+    // Pick up pending join token (stored when link was opened before login)
+    const _pendingToken = localStorage.getItem('wt_pending_join');
+    if (_pendingToken) {
+      localStorage.removeItem('wt_pending_join');
+      window.history.replaceState({}, '', '?join=' + _pendingToken);
     }
+
+    // Handle family invite links (?join=TOKEN)
+    (async () => {
+      const _params = new URLSearchParams(window.location.search);
+      const _token  = _params.get('join');
+      if (!_token) return;
+      window.history.replaceState({}, '', window.location.pathname); // clean URL
+
+      const _myUid = Firebase.getUserId() || session?.uid;
+      if (!_myUid) { localStorage.setItem('wt_pending_join', _token); return; }
+
+      try {
+        if (!window.UserData) return;
+        const { inviterName } = await UserData.resolveInviteToken(_token);
+
+        // Show accept modal
+        const _modal = document.createElement('div');
+        _modal.id = 'familyInviteModal';
+        _modal.style.cssText = 'position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,0.6);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:24px;';
+        _modal.innerHTML = `
+          <div id="famInviteCard" style="background:var(--theme-family-card-bg,var(--md-surface));border-radius:24px;padding:32px 24px;max-width:340px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,0.4);text-align:center;transform:translateY(24px) scale(0.96);opacity:0;transition:transform 0.35s cubic-bezier(0.34,1.2,0.64,1),opacity 0.3s ease;">
+            <div style="font-size:48px;margin-bottom:12px;">👨‍👩‍👧</div>
+            <h2 style="font-size:19px;font-weight:800;color:var(--md-on-background);margin:0 0 8px;">Family Invite</h2>
+            <p style="font-size:14px;color:var(--md-on-surface-med);line-height:1.6;margin:0 0 24px;">
+              <strong style="color:var(--md-on-background);">${Utils.escapeHtml(inviterName)}</strong>
+              invited you to join their hydration family.<br>
+              <span style="font-size:12px;">You'll both see each other's daily progress.</span>
+            </p>
+            <div style="display:flex;gap:10px;">
+              <button id="famInviteCancel" style="flex:1;padding:13px;border-radius:14px;border:1.5px solid var(--md-outline);background:var(--md-surface-2);color:var(--md-on-surface-med);font-size:14px;font-weight:600;cursor:pointer;">Cancel</button>
+              <button id="famInviteAccept" style="flex:2;padding:13px;border-radius:14px;border:none;background:linear-gradient(135deg,#1a73e8,#00C853);color:#fff;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(26,115,232,0.35);">✅ Accept</button>
+            </div>
+          </div>`;
+        document.body.appendChild(_modal);
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          const c = document.getElementById('famInviteCard');
+          if (c) { c.style.transform = 'none'; c.style.opacity = '1'; }
+        }));
+
+        const _closeModal = () => {
+          const c = document.getElementById('famInviteCard');
+          if (c) { c.style.transform = 'translateY(12px) scale(0.97)'; c.style.opacity = '0'; c.style.transition = 'all 0.22s ease'; }
+          setTimeout(() => _modal.remove(), 240);
+        };
+
+        document.getElementById('famInviteCancel').addEventListener('click', _closeModal);
+        _modal.addEventListener('click', e => { if (e.target === _modal) _closeModal(); });
+
+        document.getElementById('famInviteAccept').addEventListener('click', async () => {
+          const btn = document.getElementById('famInviteAccept');
+          if (btn) { btn.textContent = 'Joining…'; btn.disabled = true; }
+          try {
+            const result = await UserData.acceptFamilyInvite(_token);
+            _closeModal();
+            Utils.showToast(`🎉 You joined ${inviterName}'s family! (${result.newCount} connected)`);
+            if (window.SettingsScreen) SettingsScreen.renderForRole();
+          } catch(e) {
+            Utils.showToast('❌ ' + e.message);
+            if (btn) { btn.textContent = '✅ Accept'; btn.disabled = false; }
+          }
+        });
+      } catch(e) {
+        Utils.showToast('⚠️ ' + e.message);
+      }
+    })();
 
     // Weather-based smart goal popup (non-blocking, only before noon, once per day)
     if (window.WeatherGoal) WeatherGoal.tryShow().catch(() => {});
@@ -385,148 +448,7 @@ const App = (() => {
     Utils.showToast(isAdmin ? '🔑 Admin access granted' : '👋 Welcome back!');
   };
 
-  /* ── Handle family invite links (?joinFamily=ownerUid) ── */
-  const _handleFamilyInvite = async (pendingUid = null) => {
-    // pendingUid is passed when called from the post-login pending-join path
-    // (URL is already cleaned by then, so we can't read from params)
-    const params = new URLSearchParams(window.location.search);
-    const inviterUid = pendingUid || params.get('joinFamily');
-    if (!inviterUid) return;
 
-    // Clean URL if it still has the param
-    if (params.get('joinFamily')) {
-      window.history.replaceState({}, '', window.location.pathname);
-    }
-
-    const session = Auth.getSession();
-    if (!session) {
-      // Store for after login
-      localStorage.setItem('wt_pending_family_join', inviterUid);
-      return;
-    }
-
-    const myUid = Firebase.getUserId() || session.uid;
-    if (!myUid) return;
-    if (inviterUid === myUid) { Utils.showToast('⚠️ You cannot join your own family.'); return; }
-
-    // Check if already in family
-    const currentState = window.UserData ? UserData.getState() : {};
-    if ((currentState.familyMembers || []).includes(inviterUid)) {
-      Utils.showToast('You are already connected with this person.');
-      return;
-    }
-
-    // Fetch inviter's name
-    let inviterName = 'Someone';
-    try {
-      if (window.firebase && firebase.apps?.length) {
-        const ownerDoc = await firebase.firestore().collection('users').doc(inviterUid).get();
-        if (!ownerDoc.exists) { Utils.showToast('⚠️ Invalid or expired invite link.'); return; }
-        const d = ownerDoc.data() || {};
-        inviterName = d.displayName || d.email?.split('@')[0] || inviterUid.slice(0,8);
-      }
-    } catch(e) {
-      console.warn('[App] Could not fetch inviter info:', e.message);
-    }
-
-    // Show accept/cancel modal
-    const modal = document.createElement('div');
-    modal.id = 'familyJoinModal';
-    modal.style.cssText = `
-      position:fixed;inset:0;z-index:9500;
-      background:rgba(0,0,0,0.6);backdrop-filter:blur(8px);
-      display:flex;align-items:center;justify-content:center;padding:24px;
-    `;
-    modal.innerHTML = `
-      <div id="familyJoinCard" style="
-        background:var(--theme-family-card-bg);
-        border-radius:24px;padding:32px 28px;
-        max-width:360px;width:100%;
-        box-shadow:var(--theme-modal-shadow);
-        text-align:center;
-        transform:translateY(32px) scale(0.95);opacity:0;
-        transition:transform 0.35s cubic-bezier(0.34,1.2,0.64,1),opacity 0.3s ease;
-      ">
-        <div style="font-size:52px;margin-bottom:12px;">👨‍👩‍👧</div>
-        <h2 style="font-size:20px;font-weight:800;color:var(--theme-family-title);margin:0 0 10px;">Family Invite</h2>
-        <p style="font-size:14px;color:var(--theme-family-sub);line-height:1.6;margin:0 0 24px;">
-          <strong style="color:var(--theme-family-title);">${Utils.escapeHtml(inviterName)}</strong>
-          invited you to join their hydration family network.<br>
-          <span style="font-size:12px;opacity:0.7;">You'll both see each other on the Family Leaderboard.</span>
-        </p>
-        <div style="display:flex;gap:10px;">
-          <button id="familyJoinCancel" style="
-            flex:1;padding:14px;border-radius:14px;
-            border:1.5px solid var(--theme-family-cancel-border);
-            background:var(--theme-family-cancel-bg);
-            color:var(--theme-family-cancel-text);
-            font-size:14px;font-weight:600;cursor:pointer;
-          ">Cancel</button>
-          <button id="familyJoinAccept" style="
-            flex:2;padding:14px;border-radius:14px;border:none;
-            background:var(--theme-family-accept-bg);
-            color:#fff;font-size:15px;font-weight:700;cursor:pointer;
-            box-shadow:0 4px 18px rgba(26,115,232,0.4);
-          ">✅ Accept</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(modal);
-
-    // Animate in
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      const card = document.getElementById('familyJoinCard');
-      if (card) { card.style.transform = 'none'; card.style.opacity = '1'; }
-    }));
-
-    const closeModal = () => {
-      const card = document.getElementById('familyJoinCard');
-      if (card) {
-        card.style.transform = 'translateY(16px) scale(0.97)';
-        card.style.opacity = '0';
-        card.style.transition = 'transform 0.25s ease, opacity 0.2s ease';
-      }
-      setTimeout(() => modal.remove(), 280);
-    };
-
-    document.getElementById('familyJoinCancel').addEventListener('click', closeModal);
-    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-
-    document.getElementById('familyJoinAccept').addEventListener('click', async () => {
-      const btn = document.getElementById('familyJoinAccept');
-      if (btn) { btn.textContent = 'Joining…'; btn.disabled = true; }
-      try {
-        console.log('[App] Accept invite — inviterUid:', inviterUid, 'myUid:', Firebase.getUserId());
-
-        if (window.UserData && UserData.addFamilyMemberBidirectional) {
-          // Pass only inviterUid — function now resolves joinerUid internally via Firebase.getUserId()
-          await UserData.addFamilyMemberBidirectional(inviterUid, Firebase.getUserId());
-        } else {
-          // Fallback: direct save via UserData
-          if (window.UserData) {
-            const current = UserData.getState().familyMembers || [];
-            const members = Array.from(new Set([...current, inviterUid]));
-            console.log('[App] Fallback save, members:', members);
-            await UserData.save({ familyMembers: members });
-          }
-        }
-
-        closeModal();
-        Utils.showToast(`🎉 You joined ${inviterName}'s family network!`);
-
-        // Force UI refresh on all screens that show family data
-        console.log('[App] Refreshing UI after family join...');
-        if (window.SettingsScreen) SettingsScreen.renderForRole();
-        if (window.AnalyticsScreen && Router.getCurrent() === 'analytics') {
-          setTimeout(() => Router.navigate('analytics'), 100);
-        }
-      } catch(e) {
-        console.error('[App] Family join failed:', e.message, e);
-        Utils.showToast('❌ ' + e.message);
-        if (btn) { btn.textContent = '✅ Accept'; btn.disabled = false; }
-      }
-    });
-  };
 
   /* ── Main init ── */
   const init = async () => {

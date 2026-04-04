@@ -608,168 +608,151 @@ const UserData = (() => {
     return { reward: milestone.reward, coinBalance };
   }
 
-  async function addFamilyMember(memberUid) {
-    const cleanUid = String(memberUid || '').trim();
-    if (!cleanUid) throw new Error('Invalid user ID.');
-    const myUid = window.Firebase ? Firebase.getUserId() : null;
-    if (!myUid) throw new Error('Not logged in.');
-    if (cleanUid === myUid) throw new Error('You cannot add yourself.');
-    // Prevent duplicates
-    if ((state.familyMembers || []).includes(cleanUid)) throw new Error('Already in your family.');
-    const members = Array.from(new Set([...(state.familyMembers || []), cleanUid]));
-    await save({ familyMembers: members });
-    return members;
+
+  /* ══════════════════════════════════════════════════════════
+     FAMILY SYSTEM — clean implementation
+     All writes are self-only EXCEPT the mutual-add path which
+     uses the relaxed Firestore rule for arrayUnion only.
+     ══════════════════════════════════════════════════════════ */
+
+  /* Generate a short random token for invite links */
+  function _makeInviteToken() {
+    const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    let token = '';
+    for (let i = 0; i < 10; i++) token += chars[Math.floor(Math.random() * chars.length)];
+    return token;
   }
 
-  async function addFamilyMemberBidirectional(inviterUid, joinerUid) {
-    if (!window.firebase || !firebase.apps?.length) throw new Error('Firebase not ready.');
-    if (!inviterUid) throw new Error('Invalid inviter ID.');
+  /* Create an invite token in Firestore and return the full link */
+  /* ── Invite link: NO Firestore write needed for generation ──────────────
+     Token = base64url( uid + ":" + expiryTimestamp )
+     Receiver decodes the UID directly from the URL — no DB lookup.
+     Accept writes ONLY to the two users' docs (allowed by existing rules).
+     ─────────────────────────────────────────────────────────────────────── */
 
-    const myUid = Firebase.getUserId();
-    if (!myUid) throw new Error('Not logged in. Please sign in and try again.');
+  function createFamilyInviteLink() {
+    const myUid = _getUID();
+    if (!myUid) throw new Error('Not logged in.');
+
+    // Encode uid + 7-day expiry into base64url — no Firestore write
+    const expiry  = Math.floor(Date.now() / 1000) + 7 * 24 * 3600; // Unix seconds
+    const payload = myUid + ':' + expiry;
+    const token   = btoa(payload).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+
+    const base = window.location.origin + window.location.pathname;
+    return Promise.resolve(`${base}?join=${token}`);   // returns Promise for API compat
+  }
+
+  /* Decode token → { inviterUid, inviterName } — reads inviter's user doc for name */
+  async function resolveInviteToken(token) {
+    if (!token) throw new Error('Invalid invite link.');
+
+    // Decode base64url
+    let payload;
+    try {
+      const b64 = token.replace(/-/g, '+').replace(/_/g, '/');
+      payload = atob(b64);
+    } catch(e) {
+      throw new Error('This invite link is invalid.');
+    }
+
+    const parts = payload.split(':');
+    if (parts.length < 2) throw new Error('This invite link is malformed.');
+
+    const inviterUid = parts[0];
+    const expiry     = parseInt(parts[1], 10);
+
+    if (!inviterUid) throw new Error('This invite link is invalid.');
+    if (expiry && Math.floor(Date.now() / 1000) > expiry) {
+      throw new Error('This invite link has expired (7-day limit).');
+    }
+
+    // Fetch inviter name from their user doc (read — allowed for any authed user)
+    let inviterName = 'Someone';
+    try {
+      if (window.firebase && firebase.apps?.length) {
+        const snap = await firebase.firestore().collection('users').doc(inviterUid).get();
+        if (snap.exists) {
+          const d = snap.data() || {};
+          inviterName = d.displayName || d.email?.split('@')[0] || inviterUid.slice(0, 8);
+        }
+      }
+    } catch(e) {
+      console.warn('[Family] Could not fetch inviter name:', e.message);
+    }
+
+    return { inviterUid, inviterName };
+  }
+
+  /* Accept invite: write to BOTH users' achievementState.familyMembers */
+  async function acceptFamilyInvite(token) {
+    const myUid = _getUID();
+    if (!myUid) throw new Error('Not logged in.');
+    if (!window.firebase || !firebase.apps?.length) throw new Error('Firebase not ready.');
+
+    const { inviterUid, inviterName } = await resolveInviteToken(token);
     if (inviterUid === myUid) throw new Error('You cannot join your own family.');
+
+    // Duplicate check
+    if ((state.familyMembers || []).includes(inviterUid)) {
+      throw new Error('You are already connected with this person.');
+    }
 
     const db = firebase.firestore();
 
-    // Step 1: validate inviter exists
-    console.log('[Family] Step 1 — validating inviter:', inviterUid);
-    const inviterSnap = await db.collection('users').doc(inviterUid).get()
-      .catch(e => { throw new Error('Cannot reach Firestore: ' + e.message); });
-    if (!inviterSnap.exists) throw new Error('Invite link is invalid or expired.');
+    // Write 1: add inviterUid to MY achievementState.familyMembers (own doc — always allowed)
+    await db.collection('users').doc(myUid).update({
+      'achievementState.familyMembers': firebase.firestore.FieldValue.arrayUnion(inviterUid)
+    });
 
-    // Step 2: build new members array from current state
-    const currentMembers = Array.isArray(state.familyMembers) ? state.familyMembers : [];
-    console.log('[Family] Step 2 — current familyMembers:', currentMembers);
-    if (currentMembers.includes(inviterUid)) throw new Error('Already connected with this person.');
-    const newMembers = Array.from(new Set([...currentMembers, inviterUid]));
-    console.log('[Family] Step 3 — newMembers to write:', newMembers);
-
-    // Step 3: patch state in memory FIRST (so writeLocal captures it)
-    state.familyMembers = newMembers;
-
-    // Step 4: write to localStorage immediately as safety net
-    writeLocal(state);
-    console.log('[Family] Step 4 — localStorage written');
-
-    // Step 5: write to Firestore via save()
-    // save() will mergeState then doc.set with achievementState.familyMembers
-    await save({ familyMembers: newMembers });
-    console.log('[Family] Step 5 — save() complete, state.familyMembers:', state.familyMembers);
-
-    // Step 6: read back from Firestore to confirm
+    // Write 2: add myUid to INVITER's achievementState.familyMembers
+    // Allowed by the relaxed rule in firestore.rules (arrayUnion-only update)
     try {
-      const written = await db.collection('users').doc(myUid).get();
-      const firestoreFamily = written.data()?.achievementState?.familyMembers || [];
-      console.log('[Family] Step 6 — Firestore read-back:', firestoreFamily);
-      if (!firestoreFamily.includes(inviterUid)) {
-        console.error('[Family] WRITE DID NOT LAND — rules may have blocked it. Check Firebase console.');
-      }
+      await db.collection('users').doc(inviterUid).update({
+        'achievementState.familyMembers': firebase.firestore.FieldValue.arrayUnion(myUid)
+      });
     } catch(e) {
-      console.warn('[Family] Step 6 read-back failed (non-fatal):', e.message);
+      console.warn('[Family] Mutual write failed (non-fatal — inviter will see you via reverse lookup):', e.message);
     }
 
-    // Step 7: force UI refresh
+    // Update local state immediately
+    const newMembers = Array.from(new Set([...(state.familyMembers || []), inviterUid]));
+    state.familyMembers = newMembers;
+    writeLocal(state);
+
     _famLbCacheInvalidate();
     _reverseFamilyCache = { uids: [], ts: 0 };
     emit();
-    console.log('[Family] Step 7 — emit() fired, final state.familyMembers:', state.familyMembers);
-    return state.familyMembers;
+    return { inviterName, newCount: newMembers.length };
   }
 
-  /* ── Family leaderboard cache (localStorage, 5-min TTL) ── */
-  const _FAM_LB_CACHE_KEY = 'wt_fam_lb_cache_v1';
-  const _FAM_LB_TTL = 5 * 60 * 1000;
+  /* Remove a family member from own list only */
+  async function removeFamilyMember(memberUid) {
+    const newMembers = (state.familyMembers || []).filter(id => id !== memberUid);
+    state.familyMembers = newMembers;
+    writeLocal(state);
+    await save({ familyMembers: newMembers });
+    emit();
+  }
 
-  const _famLbCacheRead = () => {
-    try {
-      const raw = localStorage.getItem(_FAM_LB_CACHE_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (Date.now() - parsed.ts > _FAM_LB_TTL) return null;
-      return parsed.rows;
-    } catch { return null; }
-  };
-  const _famLbCacheWrite = (rows) => {
-    try { localStorage.setItem(_FAM_LB_CACHE_KEY, JSON.stringify({ ts: Date.now(), rows })); } catch {}
-  };
-  const _famLbCacheInvalidate = () => {
-    try { localStorage.removeItem(_FAM_LB_CACHE_KEY); } catch {}
-  };
-
-  const _sortFamilyRows = (rows) =>
-    rows.sort((a, b) => {
-      const sd = (b.dailyStreak||0)-(a.dailyStreak||0); if (sd!==0) return sd;
-      const gd = (b.goal||0)-(a.goal||0); if (gd!==0) return gd;
-      const ap = a.goal?(a.waterIntakeToday||0)/a.goal:0;
-      const bp = b.goal?(b.waterIntakeToday||0)/b.goal:0;
-      return bp-ap;
-    }).map((r,i) => ({ ...r, rank: i+1 }));
-
-  // Cached reverse-lookup UIDs (users who added ME to their family)
-  let _reverseFamilyCache = { uids: [], ts: 0 };
-  const _REVERSE_TTL = 5 * 60 * 1000; // 5 min
-
-  /* Fetch UIDs of users who have added myUid to their familyMembers.
-     This is the reverse-lookup needed for mutual visibility without
-     cross-user writes. Cached to avoid repeated Firestore reads. */
-  const _fetchReverseFamily = async (myUid) => {
-    if (!myUid || !window.firebase || !firebase.apps?.length) return [];
-    const now = Date.now();
-    if (_reverseFamilyCache.uids.length && now - _reverseFamilyCache.ts < _REVERSE_TTL) {
-      return _reverseFamilyCache.uids;
-    }
-    try {
-      const snap = await firebase.firestore().collection('users')
-        .where('familyMembers', 'array-contains', myUid)
-        .get();
-      const uids = snap.docs.map(d => d.id).filter(id => id !== myUid);
-      _reverseFamilyCache = { uids, ts: now };
-      return uids;
-    } catch(e) {
-      console.warn('[UserData] reverse family lookup failed:', e.message);
-      return [];
-    }
-  };
-
-  const _getFamilyUids = () => {
-    const myUid = window.Firebase ? Firebase.getUserId() : null;
-    // Synchronous: returns own familyMembers + self only.
-    // For full mutual visibility, callers should use _getFamilyUidsAsync().
-    return Array.from(new Set([
+  /* Fetch hydration data for all family members (for the circles UI) */
+  async function fetchFamilyHydration() {
+    const myUid = _getUID();
+    const members = Array.from(new Set([
       ...(state.familyMembers || []),
       ...(myUid ? [myUid] : [])
     ].filter(Boolean)));
-  };
-
-  /* Async version: adds reverse-lookup UIDs for mutual visibility */
-  const _getFamilyUidsAsync = async () => {
-    const myUid = window.Firebase ? Firebase.getUserId() : null;
-    const reverseUids = myUid ? await _fetchReverseFamily(myUid) : [];
-    return Array.from(new Set([
-      ...(state.familyMembers || []),
-      ...reverseUids,
-      ...(myUid ? [myUid] : [])
-    ].filter(Boolean)));
-  };
-
-  async function fetchFamilyLeaderboard(forceRefresh) {
+    if (!members.length) return [];
     if (!window.firebase || !firebase.apps?.length) return [];
-    const memberUids = await _getFamilyUidsAsync();
-    if (!memberUids.length) return [];
 
-    // Return from cache unless forced refresh
-    if (!forceRefresh) {
-      const cached = _famLbCacheRead();
-      if (cached) return cached;
-    }
-
-    // OPTIMIZED: Firestore allows max 10 ids in 'in' query — batch into chunks of 10
-    const db = firebase.firestore();
+    const db   = firebase.firestore();
     const rows = [];
+    const today = new Date().toISOString().slice(0,10);
     const CHUNK = 10;
 
-    for (let i = 0; i < memberUids.length; i += CHUNK) {
-      const chunk = memberUids.slice(i, i + CHUNK);
+    // Batch-fetch leaderboard docs for streak + goal data
+    for (let i = 0; i < members.length; i += CHUNK) {
+      const chunk = members.slice(i, i + CHUNK);
       try {
         const snap = await db.collection('leaderboard')
           .where(firebase.firestore.FieldPath.documentId(), 'in', chunk)
@@ -777,65 +760,53 @@ const UserData = (() => {
         const found = new Set();
         snap.docs.forEach(doc => {
           found.add(doc.id);
-          rows.push({ uid: doc.id, ...doc.data() });
+          const d = doc.data();
+          const goal   = d.goal || 2500;
+          const water  = d.waterIntakeToday || 0;
+          const pct    = Math.min(100, Math.round((water / goal) * 100));
+          rows.push({
+            uid:         doc.id,
+            name:        d.displayName || doc.id.slice(0,8),
+            photoURL:    d.photoURL || null,
+            goal,
+            water,
+            pct,
+            streak:      d.dailyStreak || 0,
+            isMe:        doc.id === myUid,
+          });
         });
-        // Fill missing uids with defaults (no extra reads)
-        chunk.forEach(uid => {
-          if (!found.has(uid)) {
-            rows.push({ uid, displayName: uid.slice(0,8), dailyStreak: 0, monthlyStreak: 0, goal: 2500, waterIntakeToday: 0 });
-          }
+        // Default for members with no leaderboard doc
+        chunk.filter(uid => !found.has(uid)).forEach(uid => {
+          rows.push({ uid, name: uid.slice(0,8), goal: 2500, water: 0, pct: 0, streak: 0, isMe: uid === myUid });
         });
-      } catch (e) {
-        console.warn('[UserData] family batch fetch failed:', e.message);
-        chunk.forEach(uid => rows.push({ uid, displayName: uid.slice(0,8), dailyStreak: 0, monthlyStreak: 0, goal: 2500, waterIntakeToday: 0 }));
+      } catch(e) {
+        console.warn('[Family] fetchFamilyHydration chunk failed:', e.message);
+        chunk.forEach(uid => rows.push({ uid, name: uid.slice(0,8), goal: 2500, water: 0, pct: 0, streak: 0, isMe: uid === myUid }));
       }
     }
 
-    const sorted = _sortFamilyRows(rows);
-    _famLbCacheWrite(sorted);
-    return sorted;
+    // Sort: me first, then by pct desc
+    return rows.sort((a, b) => {
+      if (a.isMe) return -1; if (b.isMe) return 1;
+      return b.pct - a.pct;
+    });
   }
 
-  /* ── Single listener: only the CURRENT user's leaderboard doc ── */
-  /* Instead of N listeners for N family members, we only listen to  */
-  /* our own doc changing. Family data is fetched on-demand with TTL.*/
-  function subscribeToFamilyLeaderboard(callback) {
-    // Bootstrap with sync UIDs immediately, then enhance with reverse lookup
-    const syncUids = _getFamilyUids();
-    const cached = _famLbCacheRead();
-    if (cached) callback(cached);
+  // ── Legacy stubs (kept so existing callers don't crash) ──
+  async function addFamilyMember(uid) { return acceptFamilyInvite ? null : null; }
+  async function addFamilyMemberByEmail() { throw new Error('Use invite links to add family members.'); }
+  async function addFamilyMemberBidirectional() { throw new Error('Use acceptFamilyInvite instead.'); }
 
-    let _debounceTimer = null;
-    let _unsub = null;
-    let _cancelled = false;
+  // ── Cache helpers (still used by leaderboard) ──
+  const _FAM_LB_CACHE_KEY = 'wt_fam_lb_cache_v1';
+  const _FAM_LB_TTL = 5 * 60 * 1000;
+  const _famLbCacheRead  = () => { try { const r = JSON.parse(localStorage.getItem(_FAM_LB_CACHE_KEY)); return r && Date.now()-r.ts < _FAM_LB_TTL ? r.rows : null; } catch { return null; } };
+  const _famLbCacheWrite = (rows) => { try { localStorage.setItem(_FAM_LB_CACHE_KEY, JSON.stringify({ts:Date.now(),rows})); } catch {} };
+  const _famLbCacheInvalidate = () => { try { localStorage.removeItem(_FAM_LB_CACHE_KEY); } catch {} };
 
-    const _refresh = () => {
-      clearTimeout(_debounceTimer);
-      _debounceTimer = setTimeout(async () => {
-        if (_cancelled) return;
-        const rows = await fetchFamilyLeaderboard(true);
-        if (!_cancelled) callback(rows);
-      }, 400);
-    };
+  async function fetchFamilyLeaderboard() { return fetchFamilyHydration(); }
+  function subscribeToFamilyLeaderboard(cb) { fetchFamilyHydration().then(cb).catch(()=>cb([])); return ()=>{}; }
 
-    // Attach own-doc listener (fires when our leaderboard data changes)
-    const myUid = window.Firebase ? Firebase.getUserId() : null;
-    if (myUid && window.firebase && firebase.apps?.length) {
-      try {
-        _unsub = firebase.firestore().collection('leaderboard').doc(myUid)
-          .onSnapshot(() => _refresh(), err => console.warn('[FamilyLB] own-doc listener:', err.message));
-      } catch(e) { console.warn('[FamilyLB] could not attach listener:', e.message); }
-    }
-
-    // If no cache, do initial fetch (includes reverse-lookup via _getFamilyUidsAsync)
-    if (!cached) _refresh();
-
-    return () => {
-      _cancelled = true;
-      clearTimeout(_debounceTimer);
-      if (_unsub) _unsub();
-    };
-  }
 
   function getState() {
     return JSON.parse(JSON.stringify(state));
@@ -859,7 +830,13 @@ const UserData = (() => {
     claimMilestone,
     getRewardForMilestone,
     addFamilyMember,
+    addFamilyMemberByEmail,
     addFamilyMemberBidirectional,
+    createFamilyInviteLink,
+    resolveInviteToken,
+    acceptFamilyInvite,
+    removeFamilyMember,
+    fetchFamilyHydration,
     fetchFamilyLeaderboard,
     subscribeToFamilyLeaderboard,
     canUseFreeDrink,

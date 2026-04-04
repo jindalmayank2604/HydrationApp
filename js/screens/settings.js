@@ -801,85 +801,127 @@ const SettingsScreen = (() => {
 
 
   function openFamilyManagerModal() {
-    const state = UserData.getState();
-    const session = Auth.getSession() || {};
-    const uid = Firebase.getUserId() || session.uid || '';
-    const baseUrl = window.location.origin + window.location.pathname;
-    const familyLink = uid ? `${baseUrl}?joinFamily=${uid}` : null;
-
-    // Resolve display names for current members (UIDs)
+    const state    = UserData.getState();
     const memberUids = state.familyMembers || [];
 
     const overlay = openModal(`
       <div class="sheet-handle"></div>
-      <div class="sheet-title">👨‍👩‍👧 Family Group</div>
+      <div class="sheet-title">\u{1F46A} Family Network</div>
       <div class="settings-modal-grid">
 
-        ${familyLink ? `
-        <div class="family-invite-box">
-          <div class="md-input-label">🔗 Your Invite Link</div>
-          <div class="family-invite-link" id="familyLinkDisplay" style="word-break:break-all;font-size:12px;padding:10px;background:rgba(255,255,255,0.05);border-radius:10px;border:1px solid var(--md-outline);">${familyLink}</div>
-          <div style="display:flex;gap:8px;margin-top:8px;">
-            <button id="copyFamilyLink" class="md-btn md-btn--filled" style="flex:1;">📋 Copy Link</button>
-            <button id="shareFamilyLink" class="md-btn" style="flex:1;">📤 Share</button>
+        <!-- Invite link section -->
+        <div>
+          <div class="md-input-label">\u{1F517} Your Invite Link</div>
+          <div id="familyLinkBox" style="padding:10px;background:var(--md-surface-2);border-radius:10px;border:1px solid var(--md-outline);font-size:12px;word-break:break-all;color:var(--md-on-surface-med);min-height:36px;display:flex;align-items:center;">
+            Generating\u2026
           </div>
-          <div class="settings-section-sub" style="margin-top:8px;">Share this link. When someone opens it and accepts, they'll join your personal family network.</div>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button id="copyFamilyInvite" class="md-btn md-btn--filled" style="flex:1;">\u{1F4CB} Copy Link</button>
+            <button id="shareFamilyInvite" class="md-btn" style="flex:1;">\u{1F4E4} Share</button>
+          </div>
+          <div class="settings-section-sub" style="margin-top:6px;">
+            Send this link to a friend. When they open it and accept, you both get connected instantly. Link expires in 7 days.
+          </div>
         </div>
-        ` : `<div class="settings-section-sub">Log in to generate your invite link.</div>`}
 
-        <div id="familyMembersList">
-          <div class="md-input-label">Your Family Network (${memberUids.length} connected)</div>
-          ${memberUids.length === 0
-            ? '<div class="settings-section-sub">No family members yet. Share your link to connect!</div>'
-            : `<div class="family-roster" id="familyRosterEl">${memberUids.map(id => `<span class="family-roster__chip" data-uid="${id}" style="display:flex;align-items:center;gap:6px;">👤 <span class="family-uid-name">${id.slice(0,8)}…</span><button class="family-remove-btn" data-uid="${id}" style="background:none;border:none;color:var(--md-error,#ef4444);cursor:pointer;font-size:14px;padding:0 2px;" title="Remove">×</button></span>`).join('')}</div>`
-          }
+        <!-- Current members -->
+        <div>
+          <div class="md-input-label" style="margin-bottom:8px;">
+            Connected Members
+            (<span id="familyCountBadge">${memberUids.length}</span>)
+          </div>
+          <div id="familyRosterEl">
+            ${memberUids.length === 0
+              ? '<div class="settings-section-sub">No family members yet. Share your invite link!</div>'
+              : memberUids.map(id => `
+                  <div class="family-roster__chip" data-uid="${id}"
+                    style="display:flex;align-items:center;gap:8px;padding:8px;
+                           border-radius:10px;background:var(--md-surface-2);
+                           border:1px solid var(--md-outline);margin-bottom:6px;">
+                    <div style="width:32px;height:32px;border-radius:50%;background:var(--md-primary-light);
+                                display:flex;align-items:center;justify-content:center;
+                                font-size:14px;font-weight:700;color:var(--md-primary-dark);flex-shrink:0;">
+                      \u{1F464}
+                    </div>
+                    <span class="family-uid-name" style="flex:1;font-size:13px;color:var(--md-on-background);">
+                      ${id.slice(0,8)}\u2026
+                    </span>
+                    <button class="family-remove-btn" data-uid="${id}"
+                      style="background:none;border:none;color:var(--md-error,#ef4444);
+                             cursor:pointer;font-size:18px;padding:0 4px;">\u00d7</button>
+                  </div>`).join('')}
+          </div>
         </div>
       </div>
     `);
 
-    overlay.querySelector('#copyFamilyLink')?.addEventListener('click', () => {
-      navigator.clipboard.writeText(familyLink).then(() => Utils.showToast('✅ Link copied!')).catch(() => {
-        const el = document.createElement('textarea');
-        el.value = familyLink; document.body.appendChild(el);
-        el.select(); document.execCommand('copy'); el.remove();
-        Utils.showToast('✅ Link copied!');
-      });
+    // Generate invite link
+    let _inviteLink = null;
+    const linkBox = overlay.querySelector('#familyLinkBox');
+    const copyBtn = overlay.querySelector('#copyFamilyInvite');
+    const shareBtn = overlay.querySelector('#shareFamilyInvite');
+
+    UserData.createFamilyInviteLink().then(link => {
+      _inviteLink = link;
+      if (linkBox) linkBox.textContent = link;
+    }).catch(e => {
+      if (linkBox) linkBox.textContent = 'Could not generate link: ' + e.message;
+      if (copyBtn)  copyBtn.disabled = true;
+      if (shareBtn) shareBtn.disabled = true;
     });
 
-    overlay.querySelector('#shareFamilyLink')?.addEventListener('click', () => {
+    copyBtn?.addEventListener('click', () => {
+      if (!_inviteLink) return;
+      navigator.clipboard.writeText(_inviteLink)
+        .then(() => Utils.showToast('\u2705 Invite link copied!'))
+        .catch(() => {
+          const el = document.createElement('textarea');
+          el.value = _inviteLink; document.body.appendChild(el);
+          el.select(); document.execCommand('copy'); el.remove();
+          Utils.showToast('\u2705 Invite link copied!');
+        });
+    });
+
+    shareBtn?.addEventListener('click', () => {
+      if (!_inviteLink) return;
       if (navigator.share) {
-        navigator.share({ title: 'Join my hydration family!', text: 'Track hydration together — click to join my family network.', url: familyLink });
+        navigator.share({ title: 'Join my hydration family!', text: 'Track our water intake together \u{1F4A7}', url: _inviteLink });
       } else {
-        Utils.showToast('Copy the link above and send it manually.');
+        Utils.showToast('Copy the link above and share it manually.');
       }
     });
 
-    // Resolve UID → display names asynchronously
-    if (memberUids.length > 0 && window.firebase) {
-      memberUids.forEach(async (memberId) => {
+    // Resolve names
+    if (memberUids.length && window.firebase) {
+      memberUids.forEach(async uid => {
         try {
-          const doc = await firebase.firestore().collection('users').doc(memberId).get();
-          const name = doc.exists ? (doc.data()?.displayName || doc.data()?.email?.split('@')[0] || memberId.slice(0,8)) : memberId.slice(0,8);
-          const nameEl = overlay.querySelector(`.family-roster__chip[data-uid="${memberId}"] .family-uid-name`);
-          if (nameEl) nameEl.textContent = name;
+          const doc = await firebase.firestore().collection('users').doc(uid).get();
+          const name = doc.exists
+            ? (doc.data()?.displayName || doc.data()?.email?.split('@')[0] || uid.slice(0,8))
+            : uid.slice(0,8);
+          overlay.querySelectorAll(`.family-roster__chip[data-uid="${uid}"] .family-uid-name`)
+            .forEach(el => { el.textContent = name; });
         } catch(e) {}
       });
     }
 
-    // Remove family member buttons
+    // Remove buttons
     overlay.querySelectorAll('.family-remove-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const removeUid = btn.dataset.uid;
-        if (!confirm('Remove this person from your family network?')) return;
+        const uid = btn.dataset.uid;
+        if (!confirm('Remove this person from your family?')) return;
         try {
-          const newMembers = (UserData.getState().familyMembers || []).filter(id => id !== removeUid);
-          await UserData.save({ familyMembers: newMembers });
+          await UserData.removeFamilyMember(uid);
           btn.closest('.family-roster__chip')?.remove();
-          Utils.showToast('Removed from family.');
+          const count = overlay.querySelector('#familyCountBadge');
+          const newCount = (UserData.getState().familyMembers || []).length;
+          if (count) count.textContent = newCount;
+          Utils.showToast('Removed.');
         } catch(e) { Utils.showToast('Could not remove: ' + e.message); }
       });
     });
   }
+
 
   function openGoalEditModal() {
     const current = window.UserData ? UserData.getState().hydrationGoal : 3000;
