@@ -27,6 +27,11 @@ const LocalStorage = (() => {
   const addEntry          = (amt, date)  => { const e = getEntries(); e.push({ id: Date.now().toString(), amount: amt, date }); saveEntries(e); };
   const getEntriesForDate = (date)       => getEntries().filter(e => e.date === date);
   const getTotalForDate   = (date)       => getEntriesForDate(date).reduce((s, e) => s + e.amount, 0);
+  const getDailyTotals    = ()           => getEntries().reduce((acc, entry) => {
+    if (!entry?.date) return acc;
+    acc[entry.date] = (acc[entry.date] || 0) + (Number(entry.amount) || 0);
+    return acc;
+  }, {});
   const setTotalForDate   = (date, t)    => { const e = getEntries().filter(e => e.date !== date); if (t > 0) e.push({ id: Date.now().toString(), amount: t, date }); saveEntries(e); };
   const deleteEntry       = (id)         => saveEntries(getEntries().filter(e => e.id !== id));
   const getAllDates        = ()           => [...new Set(getEntries().map(e => e.date))].sort().reverse();
@@ -37,7 +42,7 @@ const LocalStorage = (() => {
   const setReminderPrefs  = (p)          => writeJSON(REMINDER_KEY, p);
   const resetAll          = ()           => localStorage.removeItem(ENTRIES_KEY);
 
-  return { addEntry, getEntriesForDate, getTotalForDate, setTotalForDate, deleteEntry, getAllDates, getGoal, setGoal, getReminderPrefs, setReminderPrefs, resetAll };
+  return { addEntry, getEntriesForDate, getTotalForDate, getDailyTotals, setTotalForDate, deleteEntry, getAllDates, getGoal, setGoal, getReminderPrefs, setReminderPrefs, resetAll };
 })();
 
 /* ── Storage proxy — Firestore first, localStorage fallback ── */
@@ -51,6 +56,19 @@ const Storage = (() => {
         console.log(`[Storage] ✅ Firestore OK — ${label} (uid: ${Firebase.getUserId()})`);
         return result;
       } catch (e) {
+        const canRetry = /permission|insufficient/i.test(e?.message || '');
+        if (canRetry) {
+          const retryReady = await Firebase.waitUntilReady(4000);
+          if (retryReady) {
+            try {
+              const retryResult = await firestoreFn();
+              console.log(`[Storage] ✅ Firestore retry OK — ${label} (uid: ${Firebase.getUserId()})`);
+              return retryResult;
+            } catch (retryError) {
+              console.warn(`[Storage] ⚠️ Firestore retry failed for ${label}:`, retryError.message);
+            }
+          }
+        }
         console.warn(`[Storage] ⚠️ Firestore failed for ${label}:`, e.message);
       }
     } else {
@@ -62,6 +80,7 @@ const Storage = (() => {
   const addEntry          = (amt, date) => run('addEntry',          () => Firebase.addEntry(amt, date),      () => LocalStorage.addEntry(amt, date));
   const getEntriesForDate = (date)      => run('getEntriesForDate', () => Firebase.getEntriesForDate(date),  () => LocalStorage.getEntriesForDate(date));
   const getTotalForDate   = (date)      => run('getTotalForDate',   () => Firebase.getTotalForDate(date),    () => LocalStorage.getTotalForDate(date));
+  const getDailyTotals    = ()          => run('getDailyTotals',    () => Firebase.getDailyTotals(),         () => LocalStorage.getDailyTotals());
   const setTotalForDate   = (date, t)   => run('setTotalForDate',   () => Firebase.setTotalForDate(date, t), () => LocalStorage.setTotalForDate(date, t));
   const deleteEntry       = (id)        => run('deleteEntry',       () => Firebase.deleteEntry(id),          () => LocalStorage.deleteEntry(id));
   const getAllDates        = ()          => run('getAllDates',        () => Firebase.getAllDates(),             () => LocalStorage.getAllDates());
@@ -72,5 +91,5 @@ const Storage = (() => {
   const setReminderPrefs = (p) => LocalStorage.setReminderPrefs(p);
   const resetAll         = async ()  => { await Firebase.resetAllData(); LocalStorage.resetAll(); };
 
-  return { addEntry, getEntriesForDate, getTotalForDate, setTotalForDate, deleteEntry, getAllDates, getGoal, setGoal, getReminderPrefs, setReminderPrefs, resetAll }; // resetAll now exported (STORE-1 fix)
+  return { addEntry, getEntriesForDate, getTotalForDate, getDailyTotals, setTotalForDate, deleteEntry, getAllDates, getGoal, setGoal, getReminderPrefs, setReminderPrefs, resetAll }; // resetAll now exported (STORE-1 fix)
 })();

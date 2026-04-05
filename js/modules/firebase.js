@@ -50,9 +50,14 @@ const Firebase = (() => {
   };
 
   const _checkReady = () => {
-    if (db && userId) {
+    const authUid = window.firebase && firebase.apps?.length && firebase.auth
+      ? firebase.auth().currentUser?.uid
+      : null;
+    if (db && userId && authUid === userId) {
       _ready = true;
       console.log('[Firebase] Ready — uid:', userId);
+    } else {
+      _ready = false;
     }
   };
 
@@ -63,13 +68,16 @@ const Firebase = (() => {
       let elapsed = 0;
       const check = setInterval(() => {
         elapsed += 100;
-        if (db && userId) {
+        const authUid = window.firebase && firebase.apps?.length && firebase.auth
+          ? firebase.auth().currentUser?.uid
+          : null;
+        if (db && userId && authUid === userId) {
           _ready = true;
           clearInterval(check);
           resolve(true);
         } else if (elapsed >= timeoutMs) {
           clearInterval(check);
-          console.warn('[Firebase] Timeout waiting for ready. db:', !!db, 'userId:', userId);
+          console.warn('[Firebase] Timeout waiting for ready. db:', !!db, 'userId:', userId, 'authUid:', authUid || null);
           resolve(false);
         }
       }, 100);
@@ -98,6 +106,16 @@ const Firebase = (() => {
     return entries.reduce((sum, e) => sum + (e.amount || 0), 0);
   };
 
+  const getDailyTotals = async () => {
+    const snap = await col().get();
+    return snap.docs.reduce((acc, doc) => {
+      const data = doc.data() || {};
+      if (!data.date) return acc;
+      acc[data.date] = (acc[data.date] || 0) + (Number(data.amount) || 0);
+      return acc;
+    }, {});
+  };
+
   const setTotalForDate = async (date, newTotal) => {
     const snap = await col().where('date', '==', date).get();
     const batch = db.batch();
@@ -110,10 +128,7 @@ const Firebase = (() => {
 
   const deleteEntry = async (id) => { await col().doc(id).delete(); };
 
-  const getAllDates = async () => {
-    const snap = await col().orderBy('date', 'desc').get();
-    return [...new Set(snap.docs.map(d => d.data().date))].sort().reverse();
-  };
+  const getAllDates = async () => Object.keys(await getDailyTotals()).sort().reverse();
 
   const resetAllData = async () => {
     if (!db || !userId) throw new Error('Not logged in');
@@ -139,7 +154,7 @@ const Firebase = (() => {
   return {
     autoInit, setUserId, resetUserId, waitUntilReady,
     isInitialized, getUserId, getConfig, clearConfig,
-    addEntry, getEntriesForDate, getTotalForDate,
+    addEntry, getEntriesForDate, getTotalForDate, getDailyTotals,
     setTotalForDate, deleteEntry, getAllDates, resetAllData,
     getGoal, setGoal, getReminderPrefs, setReminderPrefs,
   };

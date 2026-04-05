@@ -1,4 +1,4 @@
-/* ══════════════════════════════════════════
+﻿/* ══════════════════════════════════════════
    SCREEN: Home — daily tracking dashboard
    ══════════════════════════════════════════ */
 
@@ -48,7 +48,7 @@ const HomeScreen = (() => {
           <div class="hero-motivation" id="heroMotivation">🌊 Start your hydration journey!</div>
         </div>
 
-        <!-- streak + free drink strip -->
+        <!-- streak + footstep counter -->
         <div class="home-strip">
           <div class="home-strip__item">
             <span class="home-strip__icon">🔥</span>
@@ -56,49 +56,20 @@ const HomeScreen = (() => {
             <span class="home-strip__label">day streak</span>
           </div>
           <div class="home-strip__divider"></div>
-          <div class="home-strip__item" id="stepsStripItem">
+          <div class="home-strip__item home-strip__item--coming-soon" id="stepsComingSoonStrip">
             <span class="home-strip__icon">👟</span>
-            <span class="home-strip__val" id="homeStepsVal">—</span>
-            <span class="home-strip__label">steps today</span>
-          </div>
-          <div class="home-strip__divider"></div>
-          <div class="home-strip__item" style="gap:6px;align-items:center;">
-            <span style="font-size:11px;color:var(--md-on-surface-med);font-weight:600;white-space:nowrap;">Steps</span>
-            <span class="home-strip__val" id="liveStepCount" style="min-width:24px;">0</span>
-            <label class="step-toggle-switch" title="Toggle step tracking">
-              <input type="checkbox" id="stepTrackToggle" style="display:none;">
-              <span class="step-toggle-track"><span class="step-toggle-thumb"></span></span>
-            </label>
+            <span class="home-strip__val">Soon</span>
+            <span class="home-strip__label">footstep counter</span>
           </div>
         </div>
 
         <!-- Weather strip -->
         <div id="weatherStrip" style="display:none;"></div>
 
-        <!-- Step count card (Android + workout mode only) -->
-        <div id="stepsCard" style="display:none;">
-          <div class="steps-card">
-            <div class="steps-card__header">
-              <div class="steps-card__left">
-                <span class="steps-card__icon">🚶</span>
-                <div>
-                  <div class="steps-card__title" id="stepsCardTitle">Step Hydration</div>
-                  <div class="steps-card__sub" id="stepsCardSub">Syncing from Health Connect…</div>
-                </div>
-              </div>
-              <div class="steps-card__right">
-                <div class="steps-card__count" id="stepsCardCount">0</div>
-                <div class="steps-card__unit">steps</div>
-              </div>
-            </div>
-            <div class="steps-card__bar-wrap">
-              <div class="steps-card__bar" id="stepsBar" style="width:0%"></div>
-            </div>
-            <div class="steps-card__footer">
-              <span id="stepsLossLabel" class="steps-card__loss">Calculating water loss…</span>
-              <button class="steps-card__refresh" id="stepsRefreshBtn">↻ Sync</button>
-            </div>
-          </div>
+        <div class="coming-soon-banner coming-soon-banner--steps" id="stepsCard">
+          <div class="coming-soon-banner__badge">Coming Soon</div>
+          <div class="coming-soon-banner__title">Footstep Counter</div>
+          <div class="coming-soon-banner__sub">Live steps, sync, and water-loss adjustments will be available in a future update.</div>
         </div>
 
         <!-- Add row: water + other drink -->
@@ -594,40 +565,11 @@ const HomeScreen = (() => {
   };
 
   const _initStepToggle = () => {
-    const checkbox = document.getElementById('stepTrackToggle');
-    if (!checkbox) return;
-    const on = _isStepTrackOn();
-    checkbox.checked = on;
-
-    // If was on before, auto-resume on first user interaction
-    if (on && !_stepTracking) {
-      const resume = () => { _startSteps(); document.removeEventListener('touchstart', resume); };
-      document.addEventListener('touchstart', resume, { once: true });
+    const strip = document.getElementById('stepsComingSoonStrip');
+    if (strip && !strip._comingSoonBound) {
+      strip._comingSoonBound = true;
+      strip.addEventListener('click', () => Utils.showToast('Footstep counter is coming soon.'));
     }
-
-    checkbox.onchange = () => {
-      const nowOn = checkbox.checked;
-      _setStepTrack(nowOn);
-
-      if (nowOn) {
-        // iOS needs requestPermission
-        if (typeof DeviceMotionEvent?.requestPermission === 'function') {
-          DeviceMotionEvent.requestPermission().then(r => {
-            if (r === 'granted') { _startSteps(); _showStepCard(); }
-            else Utils.showToast('Motion permission denied');
-          });
-        } else {
-          // Android — just start
-          _startSteps();
-          _showStepCard();
-        }
-      } else {
-        _stopSteps();
-        const card = document.getElementById('stepsCard');
-        if (card) card.style.display = 'none';
-        Utils.showToast('Step tracking off');
-      }
-    };
   };
 
   const _showStepCard = () => {
@@ -744,3 +686,4 @@ const HomeScreen = (() => {
 
   return { init, updateUI, updateStepsDisplay };
 })();
+

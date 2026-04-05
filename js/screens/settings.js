@@ -100,7 +100,11 @@ const SettingsScreen = (() => {
                 <div class="settings-detail-row"><span>AI scans</span><strong>${isPro ? '450 / month' : '2 / day'}</strong></div>
                 <div class="settings-detail-row"><span>Coin rate</span><strong>${isPro ? '2× bonus' : '1×'}</strong></div>
               </div>
-              <button id="openFamilyManager" class="settings-inline-btn">Manage family list</button>
+              <button id="openFamilyManager" class="settings-inline-btn">Add family</button>
+              <div class="coming-soon-banner coming-soon-banner--compact">
+                <div class="coming-soon-banner__badge">Coming Soon</div>
+                <div class="coming-soon-banner__sub">Family invites and member management will return in a future update.</div>
+              </div>
               <button id="openFramePicker" class="settings-inline-btn" style="margin-top:6px;">🖼️ Your Frames — Tap to equip</button>
             </section>
 
@@ -114,27 +118,21 @@ const SettingsScreen = (() => {
               <div class="settings-form-grid">
                 <label class="settings-field-card">
                   <span class="md-input-label">Workout intensity</span>
-                  <div class="styled-select-wrap" id="wrapSettingsIntensity">
-                    <button type="button" class="styled-select-btn" data-target="ddSettingsIntensity">
-                      <span class="styled-select-val">${profile.workoutIntensity || 'light'}</span>
-                      <svg class="styled-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                  <div class="settings-choice-wrap">
+                    <button type="button" class="settings-choice-btn" id="settingsIntensityPickerBtn">
+                      <span class="settings-choice-btn__value" id="settingsIntensityPickerVal">${formatChoiceLabel(profile.workoutIntensity || 'light')}</span>
+                      <span class="settings-choice-btn__meta">Tap to choose</span>
                     </button>
-                    <div class="styled-select-dropdown" id="ddSettingsIntensity">
-                      ${['none','light','moderate','intense','athlete'].map(opt => `<div class="styled-select-opt${profile.workoutIntensity===opt?' is-sel':''}" data-val="${opt}">${opt}</div>`).join('')}
-                    </div>
                     <input type="hidden" id="settingsWorkoutIntensity" value="${profile.workoutIntensity || 'light'}"/>
                   </div>
                 </label>
                 <label class="settings-field-card">
                   <span class="md-input-label">Workout frequency</span>
-                  <div class="styled-select-wrap" id="wrapSettingsFrequency">
-                    <button type="button" class="styled-select-btn" data-target="ddSettingsFrequency">
-                      <span class="styled-select-val">${profile.workoutFrequency || 'moderate'}</span>
-                      <svg class="styled-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                  <div class="settings-choice-wrap">
+                    <button type="button" class="settings-choice-btn" id="settingsFrequencyPickerBtn">
+                      <span class="settings-choice-btn__value" id="settingsFrequencyPickerVal">${formatChoiceLabel(profile.workoutFrequency || 'moderate')}</span>
+                      <span class="settings-choice-btn__meta">Tap to choose</span>
                     </button>
-                    <div class="styled-select-dropdown" id="ddSettingsFrequency">
-                      ${['rare','light','moderate','frequent','daily'].map(opt => `<div class="styled-select-opt${profile.workoutFrequency===opt?' is-sel':''}" data-val="${opt}">${opt}</div>`).join('')}
-                    </div>
                     <input type="hidden" id="settingsWorkoutFrequency" value="${profile.workoutFrequency || 'moderate'}"/>
                   </div>
                 </label>
@@ -232,7 +230,43 @@ const SettingsScreen = (() => {
 
   function bindEvents({ isAdmin, profile }) {
     Utils.el('openEditProfile')?.addEventListener('click', openEditProfileModal);
-    Utils.el('openFamilyManager')?.addEventListener('click', openFamilyManagerModal);
+    Utils.el('openFamilyManager')?.addEventListener('click', () => {
+      Utils.showToast('Add family is coming soon.');
+    });
+    Utils.el('settingsIntensityPickerBtn')?.addEventListener('click', () => {
+      openChoicePicker({
+        title: 'Workout Intensity',
+        currentValue: Utils.el('settingsWorkoutIntensity')?.value || profile.workoutIntensity || 'light',
+        options: [
+          { value: 'none', label: 'None', icon: '🛋️', sub: 'No workouts' },
+          { value: 'light', label: 'Light', icon: '🚶', sub: 'Easy movement' },
+          { value: 'moderate', label: 'Moderate', icon: '🏃', sub: 'Regular training' },
+          { value: 'intense', label: 'Intense', icon: '🔥', sub: 'High effort' },
+          { value: 'athlete', label: 'Athlete', icon: '🏅', sub: 'Elite level' },
+        ],
+        onPick: (picked) => {
+          Utils.el('settingsWorkoutIntensity').value = picked.value;
+          Utils.el('settingsIntensityPickerVal').textContent = picked.label;
+        },
+      });
+    });
+    Utils.el('settingsFrequencyPickerBtn')?.addEventListener('click', () => {
+      openChoicePicker({
+        title: 'Workout Frequency',
+        currentValue: Utils.el('settingsWorkoutFrequency')?.value || profile.workoutFrequency || 'moderate',
+        options: [
+          { value: 'rare', label: 'Rare', icon: '🌙', sub: 'Now and then' },
+          { value: 'light', label: 'Light', icon: '🌤️', sub: 'A few times' },
+          { value: 'moderate', label: 'Moderate', icon: '📅', sub: 'Weekly routine' },
+          { value: 'frequent', label: 'Frequent', icon: '⚡', sub: 'Most days' },
+          { value: 'daily', label: 'Daily', icon: '🔁', sub: 'Every day' },
+        ],
+        onPick: (picked) => {
+          Utils.el('settingsWorkoutFrequency').value = picked.value;
+          Utils.el('settingsFrequencyPickerVal').textContent = picked.label;
+        },
+      });
+    });
 
     // Goal edit - once per day
     Utils.el('editGoalTrigger')?.addEventListener('click', () => {
@@ -367,6 +401,44 @@ const SettingsScreen = (() => {
     return overlay;
   }
 
+  function formatChoiceLabel(value, fallback = 'Select one') {
+    if (value === null || value === undefined || value === '') return fallback;
+    return String(value)
+      .split('-')
+      .map(part => part ? part.charAt(0).toUpperCase() + part.slice(1) : '')
+      .join('-');
+  }
+
+  function openChoicePicker({ title, currentValue, options, onPick, columns = 2 }) {
+    const overlay = openModal(`
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">${title}</div>
+      <div class="settings-choice-sheet">
+        <div class="add-tiles settings-choice-grid settings-choice-grid--${columns}">
+          ${options.map(opt => `
+            <button type="button" class="add-tile settings-choice-tile${String(currentValue) === String(opt.value) ? ' is-selected' : ''}" data-choice-val="${Utils.escapeHtml(String(opt.value))}">
+              <div class="add-tile-icon">${opt.icon || '✨'}</div>
+              <div class="add-tile-val">${Utils.escapeHtml(opt.label)}</div>
+              <div class="add-tile-unit">${Utils.escapeHtml(opt.sub || 'Tap to choose')}</div>
+            </button>
+          `).join('')}
+        </div>
+        <button type="button" class="md-btn md-btn--full" id="choicePickerCancelBtn">Cancel</button>
+      </div>
+    `);
+
+    overlay.querySelector('#choicePickerCancelBtn')?.addEventListener('click', () => overlay.remove());
+    overlay.querySelectorAll('[data-choice-val]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const picked = options.find(opt => String(opt.value) === String(btn.dataset.choiceVal));
+        if (!picked) return;
+        onPick?.(picked);
+        overlay.remove();
+      });
+    });
+    return overlay;
+  }
+
   async function openEditProfileModal() {
     const session = Auth.getSession() || {};
     // Wait for UserData to finish syncing from Firestore before opening modal
@@ -416,40 +488,31 @@ const SettingsScreen = (() => {
         </label>
         <label>
           <span class="md-input-label">Gender</span>
-          <div class="styled-select-wrap" id="wrapGender">
-            <button type="button" class="styled-select-btn" data-target="ddGender">
-              <span class="styled-select-val">${profile.gender || 'Select one'}</span>
-              <svg class="styled-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+          <div class="settings-choice-wrap">
+            <button type="button" class="settings-choice-btn" id="profileGenderPickerBtn">
+              <span class="settings-choice-btn__value" id="profileGenderPickerVal">${formatChoiceLabel(profile.gender, 'Select one')}</span>
+              <span class="settings-choice-btn__meta">Tap to choose</span>
             </button>
-            <div class="styled-select-dropdown" id="ddGender">
-              ${['','female','male','non-binary','other'].map(opt => `<div class="styled-select-opt${profile.gender===opt?' is-sel':''}" data-val="${opt}">${opt||'Select one'}</div>`).join('')}
-            </div>
             <input type="hidden" id="profileGenderInput" value="${profile.gender || ''}"/>
           </div>
         </label>
         <label>
           <span class="md-input-label">Workout intensity</span>
-          <div class="styled-select-wrap" id="wrapModalIntensity">
-            <button type="button" class="styled-select-btn" data-target="ddModalIntensity">
-              <span class="styled-select-val">${profile.workoutIntensity || 'light'}</span>
-              <svg class="styled-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+          <div class="settings-choice-wrap">
+            <button type="button" class="settings-choice-btn" id="profileIntensityPickerBtn">
+              <span class="settings-choice-btn__value" id="profileIntensityPickerVal">${formatChoiceLabel(profile.workoutIntensity || 'light')}</span>
+              <span class="settings-choice-btn__meta">Tap to choose</span>
             </button>
-            <div class="styled-select-dropdown" id="ddModalIntensity">
-              ${['none','light','moderate','intense','athlete'].map(opt => `<div class="styled-select-opt${profile.workoutIntensity===opt?' is-sel':''}" data-val="${opt}">${opt}</div>`).join('')}
-            </div>
             <input type="hidden" id="profileIntensityInput" value="${profile.workoutIntensity || 'light'}"/>
           </div>
         </label>
         <label>
           <span class="md-input-label">Workout frequency</span>
-          <div class="styled-select-wrap" id="wrapModalFrequency">
-            <button type="button" class="styled-select-btn" data-target="ddModalFrequency">
-              <span class="styled-select-val">${profile.workoutFrequency || 'moderate'}</span>
-              <svg class="styled-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+          <div class="settings-choice-wrap">
+            <button type="button" class="settings-choice-btn" id="profileFrequencyPickerBtn">
+              <span class="settings-choice-btn__value" id="profileFrequencyPickerVal">${formatChoiceLabel(profile.workoutFrequency || 'moderate')}</span>
+              <span class="settings-choice-btn__meta">Tap to choose</span>
             </button>
-            <div class="styled-select-dropdown" id="ddModalFrequency">
-              ${['rare','light','moderate','frequent','daily'].map(opt => `<div class="styled-select-opt${profile.workoutFrequency===opt?' is-sel':''}" data-val="${opt}">${opt}</div>`).join('')}
-            </div>
             <input type="hidden" id="profileFrequencyInput" value="${profile.workoutFrequency || 'moderate'}"/>
           </div>
         </label>
@@ -467,9 +530,57 @@ const SettingsScreen = (() => {
     };
 
     overlay.querySelector('#profileCancelBtn')?.addEventListener('click', () => overlay.remove());
-
-    // Init styled selects immediately — DOM is ready since overlay was just built
-    initStyledSelects(overlay);
+    overlay.querySelector('#profileGenderPickerBtn')?.addEventListener('click', () => {
+      openChoicePicker({
+        title: 'Choose Gender',
+        currentValue: overlay.querySelector('#profileGenderInput')?.value || '',
+        options: [
+          { value: '', label: 'Select one', icon: '🫧', sub: 'No selection' },
+          { value: 'female', label: 'Female', icon: '♀️', sub: 'Set gender' },
+          { value: 'male', label: 'Male', icon: '♂️', sub: 'Set gender' },
+          { value: 'non-binary', label: 'Non-binary', icon: '⚧️', sub: 'Set gender' },
+          { value: 'other', label: 'Other', icon: '✨', sub: 'Set gender' },
+        ],
+        onPick: (picked) => {
+          overlay.querySelector('#profileGenderInput').value = picked.value;
+          overlay.querySelector('#profileGenderPickerVal').textContent = picked.label;
+        },
+      });
+    });
+    overlay.querySelector('#profileIntensityPickerBtn')?.addEventListener('click', () => {
+      openChoicePicker({
+        title: 'Workout Intensity',
+        currentValue: overlay.querySelector('#profileIntensityInput')?.value || 'light',
+        options: [
+          { value: 'none', label: 'None', icon: '🛋️', sub: 'No workouts' },
+          { value: 'light', label: 'Light', icon: '🚶', sub: 'Easy movement' },
+          { value: 'moderate', label: 'Moderate', icon: '🏃', sub: 'Regular training' },
+          { value: 'intense', label: 'Intense', icon: '🔥', sub: 'High effort' },
+          { value: 'athlete', label: 'Athlete', icon: '🏅', sub: 'Elite level' },
+        ],
+        onPick: (picked) => {
+          overlay.querySelector('#profileIntensityInput').value = picked.value;
+          overlay.querySelector('#profileIntensityPickerVal').textContent = picked.label;
+        },
+      });
+    });
+    overlay.querySelector('#profileFrequencyPickerBtn')?.addEventListener('click', () => {
+      openChoicePicker({
+        title: 'Workout Frequency',
+        currentValue: overlay.querySelector('#profileFrequencyInput')?.value || 'moderate',
+        options: [
+          { value: 'rare', label: 'Rare', icon: '🌙', sub: 'Now and then' },
+          { value: 'light', label: 'Light', icon: '🌤️', sub: 'A few times' },
+          { value: 'moderate', label: 'Moderate', icon: '📅', sub: 'Weekly routine' },
+          { value: 'frequent', label: 'Frequent', icon: '⚡', sub: 'Most days' },
+          { value: 'daily', label: 'Daily', icon: '🔁', sub: 'Every day' },
+        ],
+        onPick: (picked) => {
+          overlay.querySelector('#profileFrequencyInput').value = picked.value;
+          overlay.querySelector('#profileFrequencyPickerVal').textContent = picked.label;
+        },
+      });
+    });
 
     // ── Custom DOB Calendar ─────────────────────────────────────────────
     (function initDobCalendar() {
@@ -982,6 +1093,28 @@ const SettingsScreen = (() => {
       const val    = wrap.querySelector('.styled-select-val');
       if (!btn || !dd || !hidden) return;
 
+      const positionDropdown = () => {
+        dd.classList.remove('styled-select-dropdown--up');
+        dd.style.maxHeight = '';
+        const btnRect = btn.getBoundingClientRect();
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+        const spaceBelow = viewportHeight - btnRect.bottom - 12;
+        const spaceAbove = btnRect.top - 12;
+        const shouldOpenUp = spaceBelow < 180 && spaceAbove > spaceBelow;
+        const usableSpace = Math.max(120, shouldOpenUp ? spaceAbove : spaceBelow);
+        dd.style.maxHeight = Math.min(usableSpace, 240) + 'px';
+        dd.classList.toggle('styled-select-dropdown--up', shouldOpenUp);
+      };
+
+      const closeDropdown = () => {
+        dd.classList.remove('is-open');
+        dd.classList.remove('styled-select-dropdown--up');
+        btn.classList.remove('is-active');
+        if (!document.querySelector('.styled-select-dropdown.is-open')) {
+          document.body.classList.remove('styled-select-open');
+        }
+      };
+
       // Toggle open
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -989,17 +1122,24 @@ const SettingsScreen = (() => {
         // Close everything first
         document.querySelectorAll('.styled-select-dropdown.is-open').forEach(d => {
           d.classList.remove('is-open');
+          d.classList.remove('styled-select-dropdown--up');
           d.closest('.styled-select-wrap')?._ssBtn?.classList.remove('is-active');
         });
-        if (opening) { dd.classList.add('is-open'); btn.classList.add('is-active'); }
+        if (opening) {
+          positionDropdown();
+          dd.classList.add('is-open');
+          btn.classList.add('is-active');
+          document.body.classList.add('styled-select-open');
+        }
       });
       wrap._ssBtn = btn;
+      wrap._ssClose = closeDropdown;
 
       // Select option — use both mousedown AND click for maximum compatibility
       dd.querySelectorAll('.styled-select-opt').forEach(opt => {
         const selectOpt = (e) => {
           e.stopPropagation();
-          if (e.type === 'mousedown') e.preventDefault();
+          if (e.type === 'mousedown' || e.type === 'pointerdown' || e.type === 'touchend') e.preventDefault();
           const v = opt.dataset.val;
           // Update hidden input
           hidden.value = v;
@@ -1009,26 +1149,41 @@ const SettingsScreen = (() => {
           dd.querySelectorAll('.styled-select-opt').forEach(o => o.classList.remove('is-sel'));
           opt.classList.add('is-sel');
           // Close
-          dd.classList.remove('is-open');
-          btn.classList.remove('is-active');
+          closeDropdown();
           // Verify write
           console.log('[Select] Set', hidden.id, '=', hidden.value);
         };
         opt.addEventListener('mousedown', selectOpt);
         opt.addEventListener('click', selectOpt);
+        opt.addEventListener('pointerdown', selectOpt);
+        opt.addEventListener('touchend', selectOpt, { passive: false });
       });
     });
 
     if (!window._ssGlobalClose) {
       window._ssGlobalClose = true;
-      document.addEventListener('click', (e) => {
+      const closeAllStyledSelects = () => {
+        document.querySelectorAll('.styled-select-dropdown.is-open').forEach(d => {
+          d.classList.remove('is-open');
+          d.classList.remove('styled-select-dropdown--up');
+          d.closest('.styled-select-wrap')?._ssBtn?.classList.remove('is-active');
+        });
+        document.body.classList.remove('styled-select-open');
+      };
+      const maybeCloseStyledSelects = (e) => {
         if (!e.target.closest('.styled-select-wrap') && !e.target.closest('.dob-picker-wrap') && !e.target.closest('.dob-calendar-popup')) {
-          document.querySelectorAll('.styled-select-dropdown.is-open').forEach(d => {
-            d.classList.remove('is-open');
-            d.closest('.styled-select-wrap')?._ssBtn?.classList.remove('is-active');
-          });
+          closeAllStyledSelects();
         }
-      });
+      };
+      document.addEventListener('click', maybeCloseStyledSelects);
+      document.addEventListener('touchstart', maybeCloseStyledSelects, { passive: true });
+      document.addEventListener('pointerdown', maybeCloseStyledSelects, { passive: true });
+      document.addEventListener('touchmove', (e) => {
+        if (!e.target.closest('.styled-select-dropdown')) closeAllStyledSelects();
+      }, { passive: true });
+      document.addEventListener('scroll', closeAllStyledSelects, true);
+      window.addEventListener('resize', closeAllStyledSelects);
+      window.addEventListener('orientationchange', closeAllStyledSelects);
     }
   }
 

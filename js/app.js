@@ -3,6 +3,8 @@
    ══════════════════════════════════════════ */
 
 const App = (() => {
+  let _authBootstrapDone = false;
+
   /* ── Advanced Navigation (orbit menu + desktop collapse) ── */
   const _setupAdvancedNavigation = () => {
     // ── Desktop sidebar toggle ──
@@ -178,6 +180,8 @@ const App = (() => {
     }
   };
   const onAuthReady = async (authResult) => {
+    if (_authBootstrapDone) return;
+    _authBootstrapDone = true;
     let session = Auth.getSession();
     if (!session) { LoginScreen.show(); return; }
     // Always start at top of page
@@ -487,8 +491,15 @@ const App = (() => {
       // onAuthStateChanged fires with the verified user — log them in automatically
       if (window.firebase && firebase.auth) {
         firebase.auth().onAuthStateChanged(async (user) => {
-          if (!user) return;
           const existingSession = Auth.getSession();
+          if (existingSession && user && user.uid === existingSession.uid) {
+            if (!_authBootstrapDone) {
+              console.log('[App] Firebase auth restored remembered session:', user.uid);
+              await onAuthReady(existingSession);
+            }
+            return;
+          }
+          if (!user) return;
           // Only auto-login if no session exists (fresh verification)
           if (existingSession) return;
           if (!user.emailVerified) {
@@ -530,9 +541,25 @@ const App = (() => {
     console.log('[App] SurveyScreen.isDone():', SurveyScreen.isDone());
 
     if (session && session.rememberMe) {
-      console.log('[App] → Branch: rememberMe session, skipping login');
+      console.log('[App] → Branch: rememberMe session, waiting for Firebase auth restore');
       LoginScreen.hide();
-      await onAuthReady(session);
+      const tryImmediateRestore = () =>
+        window.firebase && firebase.apps?.length && firebase.auth && firebase.auth().currentUser?.uid === session.uid;
+      if (tryImmediateRestore()) {
+        await onAuthReady(session);
+      } else {
+        setTimeout(() => {
+          if (_authBootstrapDone) return;
+          if (tryImmediateRestore()) {
+            onAuthReady(session);
+            return;
+          }
+          console.warn('[App] Remembered app session exists but Firebase auth was not restored. Showing login again.');
+          Auth.clearSession();
+          LoginScreen.show();
+          Utils.showToast('Session expired. Please sign in again.');
+        }, 4500);
+      }
     } else if (session && !session.rememberMe) {
       console.log('[App] → Branch: session exists, no rememberMe → LoginScreen');
       LoginScreen.show();

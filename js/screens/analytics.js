@@ -1,9 +1,10 @@
-/* ══════════════════════════════════════════
+﻿/* ══════════════════════════════════════════
    SCREEN: Analytics — weekly/monthly graphs
    ══════════════════════════════════════════ */
 
 const AnalyticsScreen = (() => {
   let currentView = 'weekly'; // 'weekly' | 'monthly'
+  let currentAnchorDate = new Date();
   let chartData   = [];       // { date, total } sorted asc
 
   /* ── Init ── */
@@ -35,10 +36,22 @@ const AnalyticsScreen = (() => {
     Utils.el('analytics-root').innerHTML = `
       <div class="screen-stack">
 
-        <!-- Toggle pills -->
-        <div class="an-toggle-row">
-          <button class="an-pill ${currentView === 'weekly' ? 'active' : ''}" id="anWeekly">📅 Weekly</button>
-          <button class="an-pill ${currentView === 'monthly' ? 'active' : ''}" id="anMonthly">📆 Monthly</button>
+        <div class="an-controls">
+          <div class="an-toggle-row">
+            <button class="an-pill ${currentView === 'weekly' ? 'active' : ''}" id="anWeekly">
+              <span class="an-pill__icon">📅</span>
+              <span class="an-pill__text">Weekly</span>
+            </button>
+            <button class="an-pill ${currentView === 'monthly' ? 'active' : ''}" id="anMonthly">
+              <span class="an-pill__icon">🗓️</span>
+              <span class="an-pill__text">Monthly</span>
+            </button>
+          </div>
+          <div class="an-period-nav">
+            <button class="an-period-btn" id="anPrevPeriod" aria-label="Previous period">‹</button>
+            <div class="an-period-label" id="anPeriodLabel"></div>
+            <button class="an-period-btn" id="anNextPeriod" aria-label="Next period">›</button>
+          </div>
         </div>
 
         <!-- Chart tile -->
@@ -66,23 +79,13 @@ const AnalyticsScreen = (() => {
       </div>
     `;
 
-    Utils.el('anWeekly').addEventListener('click', () => {
-      currentView = 'weekly';
-      Utils.el('anWeekly').classList.add('active');
-      Utils.el('anMonthly').classList.remove('active');
-      renderChart();
-      renderStats();
-    });
-
-    Utils.el('anMonthly').addEventListener('click', () => {
-      currentView = 'monthly';
-      Utils.el('anMonthly').classList.add('active');
-      Utils.el('anWeekly').classList.remove('active');
-      renderChart();
-      renderStats();
-    });
+    Utils.el('anWeekly').addEventListener('click', () => setView('weekly'));
+    Utils.el('anMonthly').addEventListener('click', () => setView('monthly'));
+    Utils.el('anPrevPeriod').addEventListener('click', () => shiftPeriod(-1));
+    Utils.el('anNextPeriod').addEventListener('click', () => shiftPeriod(1));
 
     await loadData();
+    updatePeriodControls();
     renderChart();
     renderStats();
     renderLeaderboard('daily');
@@ -92,51 +95,101 @@ const AnalyticsScreen = (() => {
 
   /* ── Load all data from Storage ── */
   const loadData = async () => {
-    const allDates = await Storage.getAllDates();
-    const goal     = Storage.getGoal();
-
-    // fetch totals for all dates in parallel
-    const entries = await Promise.all(
-      allDates.map(async date => ({
-        date,
-        total: await Storage.getTotalForDate(date)
-      }))
-    );
-    // sort ascending
-    // STREAK-1 fix: keep zero-total entries so streak engine sees broken days
-    chartData = entries.sort((a, b) => a.date.localeCompare(b.date));
+    const totalsByDate = await Storage.getDailyTotals();
+    chartData = Object.entries(totalsByDate)
+      .map(([date, total]) => ({ date, total: Number(total) || 0 }))
+      .sort((a, b) => a.date.localeCompare(b.date));
   };
 
   /* ── Get data for current view ── */
   const getViewData = () => {
-    const today = new Date();
     if (currentView === 'weekly') {
-      // Last 7 days always shown (including days with 0)
+      const start = getWeekStart(currentAnchorDate);
       const days = [];
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date(today);
-        d.setDate(d.getDate() - i);
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
         const ds = formatDateKey(d);
         const found = chartData.find(e => e.date === ds);
         days.push({ date: ds, total: found ? found.total : 0, label: shortDayLabel(d) });
       }
       return days;
     } else {
-      // Full current month — all days from 1 to last day of month
-      // Future days show as 0 (grey) so chart always has context
-      const year  = today.getFullYear();
-      const month = today.getMonth();
-      // Get total days in current month
+      const year  = currentAnchorDate.getFullYear();
+      const month = currentAnchorDate.getMonth();
+      const today = new Date();
       const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
       const days = [];
       for (let i = 1; i <= totalDaysInMonth; i++) {
         const d  = new Date(year, month, i);
         const ds = formatDateKey(d);
         const found = chartData.find(e => e.date === ds);
-        const isFuture = i > today.getDate();
+        const isCurrentMonth = year === today.getFullYear() && month === today.getMonth();
+        const isFuture = isCurrentMonth && i > today.getDate();
         days.push({ date: ds, total: found ? found.total : 0, label: String(i), isFuture });
       }
       return days;
+    }
+  };
+
+  const setView = (nextView) => {
+    if (currentView === nextView) return;
+    currentView = nextView;
+    clampAnchorToToday();
+    Utils.el('anWeekly')?.classList.toggle('active', currentView === 'weekly');
+    Utils.el('anMonthly')?.classList.toggle('active', currentView === 'monthly');
+    updatePeriodControls();
+    renderChart();
+    renderStats();
+  };
+
+  const shiftPeriod = (delta) => {
+    const next = new Date(currentAnchorDate);
+    if (currentView === 'weekly') {
+      next.setDate(next.getDate() + delta * 7);
+    } else {
+      next.setMonth(next.getMonth() + delta, 1);
+    }
+    currentAnchorDate = next;
+    clampAnchorToToday();
+    updatePeriodControls();
+    renderChart();
+    renderStats();
+  };
+
+  const clampAnchorToToday = () => {
+    const today = new Date();
+    if (currentView === 'weekly') {
+      const currentWeekStart = getWeekStart(today);
+      if (getWeekStart(currentAnchorDate) > currentWeekStart) {
+        currentAnchorDate = new Date(today);
+      }
+      return;
+    }
+    const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const anchorMonthStart = new Date(currentAnchorDate.getFullYear(), currentAnchorDate.getMonth(), 1);
+    if (anchorMonthStart > currentMonthStart) {
+      currentAnchorDate = new Date(today);
+    }
+  };
+
+  const updatePeriodControls = () => {
+    const label = Utils.el('anPeriodLabel');
+    const nextBtn = Utils.el('anNextPeriod');
+    if (!label || !nextBtn) return;
+
+    if (currentView === 'weekly') {
+      const start = getWeekStart(currentAnchorDate);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      label.textContent = `${formatPeriodDate(start)} - ${formatPeriodDate(end)}`;
+      nextBtn.disabled = getWeekStart(currentAnchorDate) >= getWeekStart(new Date());
+    } else {
+      label.textContent = currentAnchorDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      const today = new Date();
+      nextBtn.disabled =
+        currentAnchorDate.getFullYear() === today.getFullYear() &&
+        currentAnchorDate.getMonth() === today.getMonth();
     }
   };
 
@@ -145,6 +198,18 @@ const AnalyticsScreen = (() => {
 
   const shortDayLabel = (d) =>
     ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+
+  const getWeekStart = (date) => {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    return d;
+  };
+
+  const formatPeriodDate = (date) =>
+    date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
   const shortMonthLabel = (d) => {
     // Show date number, and month name on 1st
@@ -250,7 +315,7 @@ const AnalyticsScreen = (() => {
     // Monthly: NEVER show empty — always render the full month chart
     if (!hasAnyData && currentView === 'weekly') {
       tile.innerHTML = `
-        <div class="an-chart-title">Last 7 Days</div>
+        <div class="an-chart-title">${currentView === 'weekly' ? 'Selected Week' : new Date(currentAnchorDate).toLocaleString('en',{month:'long',year:'numeric'})}</div>
         <div class="an-empty">💧 No data yet — start logging!</div>
       `;
       return;
@@ -297,7 +362,7 @@ const AnalyticsScreen = (() => {
     const labelStep = currentView === 'weekly' ? 1 : 5;
 
     tile.innerHTML = `
-      <div class="an-chart-title">${currentView === 'weekly' ? 'Last 7 Days' : new Date().toLocaleString('en',{month:'long',year:'numeric'})}</div>
+      <div class="an-chart-title">${currentView === 'weekly' ? 'Selected Week' : currentAnchorDate.toLocaleString('en',{month:'long',year:'numeric'})}</div>
       <div class="an-chart-wrap" style="position:relative;">
         <svg id="anChartSVG" viewBox="0 0 ${W} ${H}" width="100%" style="overflow:visible;display:block;">
 
@@ -368,7 +433,7 @@ const AnalyticsScreen = (() => {
         // Monthly with no data — show month summary with zeros
         const goal = Storage.getGoal();
         tile.innerHTML = `
-          <div class="an-stats-title">📊 ${new Date().toLocaleString('en',{month:'long'})} Summary</div>
+          <div class="an-stats-title">📊 ${currentAnchorDate.toLocaleString('en',{month:'long'})} Summary</div>
           <div class="an-empty" style="padding:12px 0;">No data logged this month yet 💧<br>
           <span style="font-size:12px;opacity:0.7;">Start logging to build your streak!</span></div>
         `;
@@ -395,7 +460,7 @@ const AnalyticsScreen = (() => {
     };
 
     tile.innerHTML = `
-      <div class="an-stats-title">📊 ${currentView === 'weekly' ? 'This Week' : new Date().toLocaleString('en',{month:'long'})+' Summary'}</div>
+      <div class="an-stats-title">📊 ${currentView === 'weekly' ? 'Selected Week' : currentAnchorDate.toLocaleString('en',{month:'long'})+' Summary'}</div>
 
       <div class="an-stats-grid">
 
@@ -563,183 +628,14 @@ const AnalyticsScreen = (() => {
 
   const renderFamilyLeaderboard = async () => {
     const tile = Utils.el('familyHydrationTile');
-    if (!tile || !window.UserData) return;
-
-    const state    = UserData.getState();
-    const myUid    = window.Firebase ? Firebase.getUserId() : null;
-    const members  = state.familyMembers || [];
-
-    // Inject CSS once
-    if (!document.getElementById('famCircleCSS')) {
-      const s = document.createElement('style');
-      s.id = 'famCircleCSS';
-      s.textContent = `
-        .fam-circles-wrap {
-          display: flex;
-          gap: 16px;
-          overflow-x: auto;
-          padding: 4px 2px 12px;
-          scrollbar-width: none;
-          -ms-overflow-style: none;
-          -webkit-overflow-scrolling: touch;
-        }
-        .fam-circles-wrap::-webkit-scrollbar { display: none; }
-        .fam-circle-item {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 8px;
-          flex-shrink: 0;
-          cursor: default;
-        }
-        .fam-circle-svg { display: block; }
-        .fam-circle-name {
-          font-size: 12px;
-          font-weight: 700;
-          color: var(--md-on-surface-med);
-          text-align: center;
-          max-width: 72px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .fam-circle-streak {
-          font-size: 10px;
-          color: var(--md-on-surface-low);
-          text-align: center;
-        }
-        .fam-empty {
-          text-align: center;
-          padding: 24px 0;
-          color: var(--md-on-surface-med);
-          font-size: 13px;
-        }
-        @keyframes fam-fill {
-          from { stroke-dashoffset: 220; }
-        }
-      `;
-      document.head.appendChild(s);
-    }
-
+    if (!tile) return;
     tile.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <div>
-          <div style="font-size:15px;font-weight:700;color:var(--md-on-background);">
-            \u{1F46A} Family Hydration
-          </div>
-          <div style="font-size:11px;color:var(--md-on-surface-med);margin-top:2px;">
-            Today's progress across your network
-          </div>
-        </div>
-        <button id="famInviteBtn" class="md-btn" style="font-size:12px;padding:6px 12px;">
-          \u{1F517} Invite
-        </button>
-      </div>
-      <div id="famCirclesWrap" class="fam-circles-wrap">
-        <div class="fam-empty">\u23f3 Loading…</div>
+      <div class="coming-soon-banner">
+        <div class="coming-soon-banner__badge">Coming Soon</div>
+        <div class="coming-soon-banner__title">Family Leaderboard</div>
+        <div class="coming-soon-banner__sub">Private family hydration rankings will return in a future update.</div>
       </div>
     `;
-
-    // Invite button
-    tile.querySelector('#famInviteBtn')?.addEventListener('click', async () => {
-      try {
-        const link = await UserData.createFamilyInviteLink();
-        navigator.clipboard.writeText(link)
-          .then(() => Utils.showToast('\u2705 Invite link copied!'))
-          .catch(() => Utils.showToast(link));
-      } catch(e) { Utils.showToast('\u274C ' + e.message); }
-    });
-
-    const wrap = tile.querySelector('#famCirclesWrap');
-    if (!wrap) return;
-
-    if (!members.length) {
-      wrap.innerHTML = `
-        <div class="fam-empty">
-          \u{1F465} No family members yet.<br>
-          <span style="font-size:11px;">Tap Invite to share your link!</span>
-        </div>`;
-      return;
-    }
-
-    // Fetch data
-    let rows = [];
-    try {
-      rows = await UserData.fetchFamilyHydration();
-    } catch(e) {
-      wrap.innerHTML = '<div class="fam-empty">Could not load family data.</div>';
-      return;
-    }
-
-    // Render circles
-    const R = 34, CIRC = 2 * Math.PI * R; // circumference ≈ 213.6
-    const SIZE = 80;
-    const CENTER = SIZE / 2;
-
-    wrap.innerHTML = rows.map(row => {
-      const pct       = Math.max(0, Math.min(100, row.pct || 0));
-      const filled    = CIRC * (pct / 100);
-      const empty     = CIRC - filled;
-      const isMe      = row.isMe;
-
-      // Color by %
-      const color = pct >= 100 ? '#00C853'
-                  : pct >= 60  ? '#1A73E8'
-                  : pct >= 30  ? '#FBBC04'
-                  : '#EA4335';
-
-      const trackColor = isMe ? 'rgba(26,115,232,0.12)' : 'rgba(0,0,0,0.07)';
-
-      return `
-        <div class="fam-circle-item">
-          <svg class="fam-circle-svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
-            <!-- Track -->
-            <circle
-              cx="${CENTER}" cy="${CENTER}" r="${R}"
-              fill="none" stroke="${trackColor}" stroke-width="6"/>
-            <!-- Fill — animated -->
-            <circle
-              cx="${CENTER}" cy="${CENTER}" r="${R}"
-              fill="none"
-              stroke="${color}"
-              stroke-width="6"
-              stroke-linecap="round"
-              stroke-dasharray="${filled} ${empty}"
-              stroke-dashoffset="${CIRC * 0.25}"
-              style="transform-origin:${CENTER}px ${CENTER}px;transform:rotate(-90deg);
-                     animation:fam-fill 0.8s ease-out both;"/>
-            <!-- Percentage text -->
-            <text x="${CENTER}" y="${CENTER + 1}"
-              text-anchor="middle" dominant-baseline="middle"
-              font-family="Google Sans,sans-serif"
-              font-size="13" font-weight="800"
-              fill="${color}">${pct}%</text>
-            ${isMe ? `<circle cx="${SIZE-8}" cy="8" r="5" fill="#1A73E8" opacity="0.9"/>` : ''}
-          </svg>
-          <div class="fam-circle-name" title="${Utils.escapeHtml(row.name)}">
-            ${Utils.escapeHtml(row.name)}${isMe ? ' \u2605' : ''}
-          </div>
-          <div class="fam-circle-streak">
-            \u{1F525} ${row.streak || 0} days
-          </div>
-        </div>`;
-    }).join('');
-
-    // Subscribe for live updates (own leaderboard doc change)
-    if (UserData.subscribeToFamilyLeaderboard && !tile._famUnsub) {
-      tile._famUnsub = UserData.subscribeToFamilyLeaderboard(async () => {
-        const fresh = await UserData.fetchFamilyHydration().catch(() => null);
-        if (fresh) {
-          // Re-render just the circles wrap, not the whole tile
-          const w = tile.querySelector('#famCirclesWrap');
-          if (w) {
-            // Simple re-call
-            renderFamilyLeaderboard();
-            tile._famUnsub = null; // prevent double-subscribe on re-render
-          }
-        }
-      });
-    }
   };
 
   /* ── Monthly Report Tile (Pro only) ── */
@@ -789,3 +685,4 @@ const AnalyticsScreen = (() => {
 
   return { init };
 })();
+
