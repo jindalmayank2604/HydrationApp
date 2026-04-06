@@ -33,6 +33,7 @@ const AnalyticsScreen = (() => {
 
   /* ── Render shell ── */
   const render = async () => {
+    currentAnchorDate = new Date();
     Utils.el('analytics-root').innerHTML = `
       <div class="screen-stack">
 
@@ -85,6 +86,7 @@ const AnalyticsScreen = (() => {
     Utils.el('anNextPeriod').addEventListener('click', () => shiftPeriod(1));
 
     await loadData();
+    syncAnchorToData();
     updatePeriodControls();
     renderChart();
     renderStats();
@@ -130,6 +132,40 @@ const AnalyticsScreen = (() => {
       }
       return days;
     }
+  };
+
+  const parseDateKey = (dateKey) => {
+    const [year, month, day] = String(dateKey).split('-').map(Number);
+    return new Date(year, (month || 1) - 1, day || 1);
+  };
+
+  const periodHasData = (view, anchorDate) => {
+    if (!chartData.length) return false;
+    if (view === 'weekly') {
+      const start = getWeekStart(anchorDate);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      const startKey = formatDateKey(start);
+      const endKey = formatDateKey(end);
+      return chartData.some(entry => entry.total > 0 && entry.date >= startKey && entry.date <= endKey);
+    }
+    const year = anchorDate.getFullYear();
+    const month = anchorDate.getMonth();
+    return chartData.some(entry => {
+      if (!entry.total) return false;
+      const d = parseDateKey(entry.date);
+      return d.getFullYear() === year && d.getMonth() === month;
+    });
+  };
+
+  const syncAnchorToData = () => {
+    if (!chartData.length) {
+      currentAnchorDate = new Date();
+      return;
+    }
+    if (periodHasData(currentView, currentAnchorDate)) return;
+    const latestEntry = [...chartData].reverse().find(entry => entry.total > 0) || chartData[chartData.length - 1];
+    currentAnchorDate = parseDateKey(latestEntry.date);
   };
 
   const setView = (nextView) => {
